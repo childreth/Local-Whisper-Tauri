@@ -1,0 +1,36 @@
+:root {
+  --bg: #0e0e10;
+  --surface: #1c1c20;
+  --surface-2: #26262c;
+  --text: #e8e8ea;
+  --text-dim: #8a8a92;
+  --accent: #ff5252;
+  --accent-hover: #ff6b6b;
+  --success: #4caf50;
+  --border: #2a2a30;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
