@@ -14,6 +14,7 @@ use whisper::WhisperEngine;
 /// cheap to clone for spawn_blocking work.
 pub struct AppState {
     whisper: Mutex<Option<WhisperEngine>>,
+    active_model: Mutex<String>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +42,7 @@ pub fn run() {
         )
         .manage(AppState {
             whisper: Mutex::new(None),
+            active_model: Mutex::new(model::DEFAULT_MODEL_ID.to_string()),
         })
         .invoke_handler(tauri::generate_handler![
             transcribe,
@@ -48,6 +50,8 @@ pub fn run() {
             download_model,
             paste_text,
             set_indicator_visible,
+            list_models,
+            set_active_model,
         ])
         .setup(move |app| {
             // If the model is already downloaded, load it in the background so
@@ -69,7 +73,12 @@ pub fn run() {
 }
 
 async fn try_preload(handle: AppHandle) -> Result<(), TranscribeError> {
-    let path = model::model_path(&handle)?;
+    let id = {
+        let state = handle.state::<AppState>();
+        let id = state.active_model.lock().unwrap().clone();
+        id
+    };
+    let path = model::model_path(&handle, &id)?;
     if !path.exists() {
         return Ok(());
     }
@@ -89,7 +98,8 @@ async fn get_model_status(
     if state.whisper.lock().unwrap().is_some() {
         return Ok("ready");
     }
-    let path = model::model_path(&app)?;
+    let id = state.active_model.lock().unwrap().clone();
+    let path = model::model_path(&app, &id)?;
     Ok(if path.exists() { "ready" } else { "missing" })
 }
 
@@ -98,11 +108,71 @@ async fn download_model(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), TranscribeError> {
-    let path = model::ensure_model(app.clone()).await?;
+    let id = state.active_model.lock().unwrap().clone();
+    let path = model::ensure_model(app.clone(), id).await?;
     let engine = tokio::task::spawn_blocking(move || WhisperEngine::load(&path))
         .await
         .map_err(|e| TranscribeError::Other(format!("join: {e}")))??;
     *state.whisper.lock().unwrap() = Some(engine);
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct ModelEntry {
+    id: &'static str,
+    label: &'static str,
+    size_mb: u64,
+    present: bool,
+    active: bool,
+}
+
+#[tauri::command]
+fn list_models(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<ModelEntry>, TranscribeError> {
+    let active = state.active_model.lock().unwrap().clone();
+    let mut out = Vec::with_capacity(model::MODELS.len());
+    for m in model::MODELS {
+        let path = model::model_path(&app, m.id)?;
+        out.push(ModelEntry {
+            id: m.id,
+            label: m.label,
+            size_mb: m.size_mb,
+            present: path.exists(),
+            active: m.id == active,
+        });
+    }
+    Ok(out)
+}
+
+/// Switch the active model. Downloads if missing, then loads. No-op if
+/// `id` is already the active loaded model.
+#[tauri::command]
+async fn set_active_model(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<(), TranscribeError> {
+    model::find_model(&id)?; // validate
+
+    {
+        let active = state.active_model.lock().unwrap();
+        if *active == id && state.whisper.lock().unwrap().is_some() {
+            return Ok(());
+        }
+    }
+
+    // Drop the currently loaded engine before loading a new one to free memory.
+    *state.whisper.lock().unwrap() = None;
+
+    let path = model::ensure_model(app.clone(), id.clone()).await?;
+    let engine = tokio::task::spawn_blocking(move || WhisperEngine::load(&path))
+        .await
+        .map_err(|e| TranscribeError::Other(format!("join: {e}")))??;
+
+    *state.whisper.lock().unwrap() = Some(engine);
+    *state.active_model.lock().unwrap() = id;
     Ok(())
 }
 

@@ -6,6 +6,7 @@
   import Transcriber from './lib/Transcriber.svelte';
   import ErrorBanner from './lib/ErrorBanner.svelte';
   import PasteTester from './lib/PasteTester.svelte';
+  import ModelPicker from './lib/ModelPicker.svelte';
 
   onMount(async () => {
     try {
@@ -29,8 +30,11 @@
   {#if $appState === 'loading-model'}
     <ModelLoader />
   {:else}
-    <Transcriber />
-    <PasteTester />
+    <div class="stack">
+      <ModelPicker />
+      <Transcriber />
+      <PasteTester />
+    </div>
   {/if}
 </main>
 
@@ -39,6 +43,11 @@
     max-width: 720px;
     margin: 0 auto;
     padding: 2rem 1.5rem 3rem;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
   header {
     margin-bottom: 1.5rem;

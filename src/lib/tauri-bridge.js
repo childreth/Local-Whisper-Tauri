@@ -68,3 +68,18 @@ export async function onHotkey({ onDown, onUp }) {
 export async function setIndicatorVisible(visible) {
   return await invoke('set_indicator_visible', { visible });
 }
+
+/**
+ * @returns {Promise<Array<{id: string, label: string, size_mb: number, present: boolean, active: boolean}>>}
+ */
+export async function listModels() {
+  return await invoke('list_models');
+}
+
+/**
+ * Switch active model. Downloads first if not present. Resolves once loaded.
+ * @param {string} id
+ */
+export async function setActiveModel(id) {
+  return await invoke('set_active_model', { id });
+}
