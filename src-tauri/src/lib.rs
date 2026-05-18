@@ -1,11 +1,13 @@
 mod error;
 mod model;
 mod paste;
+mod settings;
 mod whisper;
 
+use std::str::FromStr;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 pub use error::TranscribeError;
 use whisper::WhisperEngine;
@@ -15,19 +17,24 @@ use whisper::WhisperEngine;
 pub struct AppState {
     whisper: Mutex<Option<WhisperEngine>>,
     active_model: Mutex<String>,
+    // The currently-registered global shortcut. The handler reads from this so
+    // the user can rebind without restarting the app.
+    hotkey: Mutex<Shortcut>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Ctrl+Opt+Space — hold to record, release to stop.
-    let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+    // Bootstrap hotkey from the default; settings file is loaded in setup()
+    // once we have an AppHandle to find the app data dir.
+    let initial_hotkey =
+        Shortcut::from_str(settings::DEFAULT_HOTKEY).expect("default hotkey is valid");
 
-    let hotkey_for_handler = hotkey;
     tauri::Builder::default()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
-                    if shortcut != &hotkey_for_handler {
+                    let current = app.state::<AppState>().hotkey.lock().unwrap().clone();
+                    if shortcut != &current {
                         return;
                     }
                     let name = match event.state() {
@@ -43,6 +50,7 @@ pub fn run() {
         .manage(AppState {
             whisper: Mutex::new(None),
             active_model: Mutex::new(model::DEFAULT_MODEL_ID.to_string()),
+            hotkey: Mutex::new(initial_hotkey),
         })
         .invoke_handler(tauri::generate_handler![
             transcribe,
@@ -52,6 +60,8 @@ pub fn run() {
             set_indicator_visible,
             list_models,
             set_active_model,
+            get_hotkey,
+            set_hotkey,
         ])
         .setup(move |app| {
             // If the model is already downloaded, load it in the background so
@@ -63,6 +73,11 @@ pub fn run() {
                 }
             });
 
+            // Load user settings and apply the stored hotkey, falling back to
+            // the default if the saved string no longer parses.
+            let saved = settings::load(app.handle());
+            let hotkey = Shortcut::from_str(&saved.hotkey).unwrap_or(initial_hotkey);
+            *app.state::<AppState>().hotkey.lock().unwrap() = hotkey;
             if let Err(e) = app.global_shortcut().register(hotkey) {
                 eprintln!("global hotkey registration failed: {e}");
             }
@@ -218,6 +233,33 @@ async fn transcribe(
 #[tauri::command]
 async fn paste_text(text: String) -> Result<(), TranscribeError> {
     paste::paste_text(text).await
+}
+
+#[tauri::command]
+fn get_hotkey(state: tauri::State<'_, AppState>) -> String {
+    state.hotkey.lock().unwrap().to_string()
+}
+
+#[tauri::command]
+fn set_hotkey(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    accel: String,
+) -> Result<(), TranscribeError> {
+    let new = Shortcut::from_str(&accel)
+        .map_err(|e| TranscribeError::Other(format!("invalid shortcut '{accel}': {e}")))?;
+
+    let old = { *state.hotkey.lock().unwrap() };
+    if old != new {
+        let gs = app.global_shortcut();
+        let _ = gs.unregister(old);
+        gs.register(new)
+            .map_err(|e| TranscribeError::Other(format!("register hotkey: {e}")))?;
+        *state.hotkey.lock().unwrap() = new;
+    }
+
+    settings::save(&app, &settings::Settings { hotkey: accel })?;
+    Ok(())
 }
 
 #[tauri::command]

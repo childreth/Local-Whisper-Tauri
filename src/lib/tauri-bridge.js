@@ -83,3 +83,18 @@ export async function listModels() {
 export async function setActiveModel(id) {
   return await invoke('set_active_model', { id });
 }
+
+/**
+ * @returns {Promise<string>} the current accelerator string (e.g. "Control+Alt+Space")
+ */
+export async function getHotkey() {
+  return await invoke('get_hotkey');
+}
+
+/**
+ * Persist and re-register the global hotkey.
+ * @param {string} accel — accelerator string (e.g. "Super+Shift+Space")
+ */
+export async function setHotkey(accel) {
+  return await invoke('set_hotkey', { accel });
+}

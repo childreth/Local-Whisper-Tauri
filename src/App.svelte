@@ -7,6 +7,7 @@
   import ErrorBanner from './lib/ErrorBanner.svelte';
   import PasteTester from './lib/PasteTester.svelte';
   import ModelPicker from './lib/ModelPicker.svelte';
+  import HotkeySettings from './lib/HotkeySettings.svelte';
 
   onMount(async () => {
     try {
@@ -32,6 +33,7 @@
   {:else}
     <div class="stack">
       <ModelPicker />
+      <HotkeySettings />
       <Transcriber />
       <PasteTester />
     </div>
