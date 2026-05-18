@@ -14,15 +14,25 @@
   const SILENCE_DURATION_MS = 800; // flush after this much silence
   const MIN_UTTERANCE_MS = 300; // ignore blips shorter than this
   const MAX_UTTERANCE_MS = 15000; // safety flush
+  // How much audio history to keep around for pre-roll. Captures words spoken
+  // at the instant the user hits the hotkey, before the worklet has begun
+  // forwarding frames for the new "recording" session.
+  const PREROLL_MS = 500;
 
-  // === Audio state ===
+  // === Audio pipeline (warmed once, kept alive for the app's lifetime) ===
   let audioCtx = null;
   let mediaStream = null;
   let workletNode = null;
   let sourceNode = null;
   let inputSampleRate = 48000;
+  let pipelineReady = false;
+  let pipelineInitPromise = null;
 
-  // === Per-utterance accumulator ===
+  // === Pre-roll ring buffer (only populated when NOT actively recording) ===
+  let preRoll = []; // Float32Array[]
+  let preRollSamples = 0;
+
+  // === Per-utterance accumulator (only populated when actively recording) ===
   let frames = []; // Float32Array[]
   let frameSamples = 0;
   let silentMs = 0;
@@ -37,8 +47,13 @@
     return (samples / inputSampleRate) * 1000;
   }
 
-  async function startRecording() {
-    try {
+  // Open the mic, AudioContext, and worklet once. Idempotent — repeat calls
+  // resolve immediately if the pipeline is already up.
+  async function initPipeline() {
+    if (pipelineReady) return;
+    if (pipelineInitPromise) return pipelineInitPromise;
+
+    pipelineInitPromise = (async () => {
       mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -59,7 +74,44 @@
       sourceNode.connect(workletNode);
       // No connection to destination — we don't want to play back the mic.
 
-      resetUtterance();
+      pipelineReady = true;
+    })();
+
+    try {
+      await pipelineInitPromise;
+    } finally {
+      pipelineInitPromise = null;
+    }
+  }
+
+  async function startRecording() {
+    try {
+      if (!pipelineReady) {
+        // First time, or permission was previously denied. Cold-start it now —
+        // first word may still be partially lost on this single call.
+        await initPipeline();
+      }
+
+      // Seed the utterance with the pre-roll so words spoken at the moment
+      // the hotkey fired are captured.
+      frames = preRoll.slice();
+      frameSamples = preRollSamples;
+      // Recompute speech/silence accounting from the pre-roll so the silence
+      // timer starts in the right state.
+      silentMs = 0;
+      speechMs = 0;
+      for (const f of frames) {
+        const ms = frameMs(f.length);
+        if (rms(f) < SILENCE_THRESHOLD) {
+          silentMs += ms;
+        } else {
+          silentMs = 0;
+          speechMs += ms;
+        }
+      }
+      preRoll = [];
+      preRollSamples = 0;
+
       appState.set('recording');
       if (pasteOnComplete) {
         try { await setIndicatorVisible(true); } catch {}
@@ -81,7 +133,8 @@
       flushUtterance();
     }
     resetUtterance();
-    await teardown();
+    // Keep the pipeline warm — do NOT teardown. handleFrame will resume
+    // filling the pre-roll buffer.
     micLevel.set(0);
     appState.set('idle');
     pasteOnComplete = false;
@@ -89,6 +142,7 @@
   }
 
   async function teardown() {
+    pipelineReady = false;
     if (workletNode) {
       workletNode.port.onmessage = null;
       workletNode.disconnect();
@@ -108,6 +162,8 @@
       } catch {}
       audioCtx = null;
     }
+    preRoll = [];
+    preRollSamples = 0;
   }
 
   function resetUtterance() {
@@ -120,13 +176,30 @@
   let lastLevelEmit = 0;
   function handleFrame(frame) {
     const level = rms(frame);
-    micLevel.set(level);
-    if (pasteOnComplete) {
+    const recording = $appState === 'recording';
+
+    // Mic meter only meaningful while we're "live" — keep it at zero in pre-roll
+    // mode so the meter doesn't suggest the app is recording when it isn't.
+    micLevel.set(recording ? level : 0);
+
+    if (recording && pasteOnComplete) {
       const now = performance.now();
       if (now - lastLevelEmit > 40) {
         lastLevelEmit = now;
         emit('indicator:level', { level, transcribing: false }).catch(() => {});
       }
+    }
+
+    if (!recording) {
+      // Keep a rolling window of recent audio so a hotkey press can grab the
+      // last PREROLL_MS to capture words spoken at the moment of trigger.
+      preRoll.push(frame);
+      preRollSamples += frame.length;
+      while (preRoll.length > 0 && frameMs(preRollSamples - preRoll[0].length) >= PREROLL_MS) {
+        preRollSamples -= preRoll[0].length;
+        preRoll.shift();
+      }
+      return;
     }
 
     frames.push(frame);
@@ -217,7 +290,7 @@
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
-    // Hold-to-record via global hotkey (Cmd+Shift+Space on macOS).
+    // Hold-to-record via global hotkey (⌃⌥Space).
     unlistenHotkey = await onHotkey({
       onDown: () => {
         if ($appState === 'idle' || $appState === 'error') {
@@ -229,6 +302,19 @@
         if ($appState === 'recording') stopRecording();
       },
     });
+
+    // Warm the mic pipeline now so the first hotkey press doesn't pay the
+    // CoreAudio cold-start cost (~200-500 ms). The macOS mic indicator will
+    // stay on for the app's lifetime — that's the trade-off for instant
+    // capture. If permission isn't granted yet, swallow the error and we'll
+    // fall back to lazy init on the first recording attempt.
+    try {
+      await initPipeline();
+    } catch (e) {
+      // Common case: user hasn't approved mic access yet. Pipeline stays cold
+      // and startRecording() will retry (triggering the system prompt).
+      console.warn('mic warm-up skipped:', e?.message || e);
+    }
   });
 
   onDestroy(() => {
