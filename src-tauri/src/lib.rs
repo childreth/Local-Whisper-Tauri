@@ -47,6 +47,7 @@ pub fn run() {
             get_model_status,
             download_model,
             paste_text,
+            set_indicator_visible,
         ])
         .setup(move |app| {
             // If the model is already downloaded, load it in the background so
@@ -147,4 +148,28 @@ async fn transcribe(
 #[tauri::command]
 async fn paste_text(text: String) -> Result<(), TranscribeError> {
     paste::paste_text(text).await
+}
+
+#[tauri::command]
+fn set_indicator_visible(app: AppHandle, visible: bool) -> Result<(), TranscribeError> {
+    let win = app
+        .get_webview_window("indicator")
+        .ok_or_else(|| TranscribeError::Other("indicator window missing".into()))?;
+    if visible {
+        // Position above the notch / top-center each time we show, in case the
+        // user moved displays. Width is fixed in tauri.conf.json (200px).
+        if let Ok(Some(monitor)) = win.current_monitor() {
+            let mon_size = monitor.size();
+            let scale = monitor.scale_factor();
+            let x = (mon_size.width as f64) / scale / 2.0 - 100.0;
+            let y = 8.0;
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+        }
+        win.show()
+            .map_err(|e| TranscribeError::Other(format!("show: {e}")))?;
+    } else {
+        win.hide()
+            .map_err(|e| TranscribeError::Other(format!("hide: {e}")))?;
+    }
+    Ok(())
 }

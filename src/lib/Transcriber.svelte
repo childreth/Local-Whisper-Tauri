@@ -1,7 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { appState, transcript, micLevel, lastError } from './stores.js';
-  import { transcribe, onHotkey, pasteText } from './tauri-bridge.js';
+  import { transcribe, onHotkey, pasteText, setIndicatorVisible } from './tauri-bridge.js';
+  import { emit } from '@tauri-apps/api/event';
   import { downsample, floatToInt16Bytes, rms } from './audio-utils.js';
   import RecordButton from './RecordButton.svelte';
   import LevelMeter from './LevelMeter.svelte';
@@ -60,6 +61,9 @@
 
       resetUtterance();
       appState.set('recording');
+      if (pasteOnComplete) {
+        try { await setIndicatorVisible(true); } catch {}
+      }
     } catch (e) {
       const message =
         e.name === 'NotAllowedError'
@@ -81,6 +85,7 @@
     micLevel.set(0);
     appState.set('idle');
     pasteOnComplete = false;
+    try { await setIndicatorVisible(false); } catch {}
   }
 
   async function teardown() {
@@ -112,9 +117,17 @@
     speechMs = 0;
   }
 
+  let lastLevelEmit = 0;
   function handleFrame(frame) {
     const level = rms(frame);
     micLevel.set(level);
+    if (pasteOnComplete) {
+      const now = performance.now();
+      if (now - lastLevelEmit > 40) {
+        lastLevelEmit = now;
+        emit('indicator:level', { level, transcribing: false }).catch(() => {});
+      }
+    }
 
     frames.push(frame);
     frameSamples += frame.length;

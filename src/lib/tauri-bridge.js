@@ -60,3 +60,11 @@ export async function onHotkey({ onDown, onUp }) {
     unUp();
   };
 }
+
+/**
+ * Show or hide the floating status pill window.
+ * @param {boolean} visible
+ */
+export async function setIndicatorVisible(visible) {
+  return await invoke('set_indicator_visible', { visible });
+}
