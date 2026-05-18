@@ -36,3 +36,27 @@ export async function downloadModel() {
 export async function onModelProgress(cb) {
   return await listen('model:progress', (event) => cb(event.payload));
 }
+
+/**
+ * Paste text into whatever app is currently focused, via clipboard + synthetic Cmd+V.
+ * The Local Whisper window must NOT be focused when this runs.
+ * Requires Accessibility permission on macOS.
+ * @param {string} text
+ */
+export async function pasteText(text) {
+  return await invoke('paste_text', { text });
+}
+
+/**
+ * Subscribe to global hotkey press/release events emitted from Rust.
+ * Returns a combined unlisten function.
+ * @param {{ onDown: () => void, onUp: () => void }} handlers
+ */
+export async function onHotkey({ onDown, onUp }) {
+  const unDown = await listen('hotkey:down', () => onDown());
+  const unUp = await listen('hotkey:up', () => onUp());
+  return () => {
+    unDown();
+    unUp();
+  };
+}

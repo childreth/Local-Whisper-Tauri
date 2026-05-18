@@ -1,9 +1,11 @@
 mod error;
 mod model;
+mod paste;
 mod whisper;
 
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub use error::TranscribeError;
 use whisper::WhisperEngine;
@@ -16,7 +18,27 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ctrl+Opt+Space — hold to record, release to stop.
+    let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+
+    let hotkey_for_handler = hotkey;
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    if shortcut != &hotkey_for_handler {
+                        return;
+                    }
+                    let name = match event.state() {
+                        ShortcutState::Pressed => "hotkey:down",
+                        ShortcutState::Released => "hotkey:up",
+                    };
+                    if let Err(e) = app.emit(name, ()) {
+                        eprintln!("emit {name} failed: {e}");
+                    }
+                })
+                .build(),
+        )
         .manage(AppState {
             whisper: Mutex::new(None),
         })
@@ -24,8 +46,9 @@ pub fn run() {
             transcribe,
             get_model_status,
             download_model,
+            paste_text,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             // If the model is already downloaded, load it in the background so
             // the first transcribe call doesn't pay the cold-start cost.
             let handle = app.handle().clone();
@@ -34,6 +57,10 @@ pub fn run() {
                     eprintln!("model preload skipped: {e}");
                 }
             });
+
+            if let Err(e) = app.global_shortcut().register(hotkey) {
+                eprintln!("global hotkey registration failed: {e}");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -115,4 +142,9 @@ async fn transcribe(
         .map_err(|e| TranscribeError::Other(format!("join: {e}")))??;
 
     Ok(text)
+}
+
+#[tauri::command]
+async fn paste_text(text: String) -> Result<(), TranscribeError> {
+    paste::paste_text(text).await
 }

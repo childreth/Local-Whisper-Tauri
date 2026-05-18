@@ -5,6 +5,7 @@
   import ModelLoader from './lib/ModelLoader.svelte';
   import Transcriber from './lib/Transcriber.svelte';
   import ErrorBanner from './lib/ErrorBanner.svelte';
+  import PasteTester from './lib/PasteTester.svelte';
 
   onMount(async () => {
     try {
@@ -29,6 +30,7 @@
     <ModelLoader />
   {:else}
     <Transcriber />
+    <PasteTester />
   {/if}
 </main>
 

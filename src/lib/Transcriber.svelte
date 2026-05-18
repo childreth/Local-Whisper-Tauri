@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { appState, transcript, micLevel, lastError } from './stores.js';
-  import { transcribe } from './tauri-bridge.js';
+  import { transcribe, onHotkey, pasteText } from './tauri-bridge.js';
   import { downsample, floatToInt16Bytes, rms } from './audio-utils.js';
   import RecordButton from './RecordButton.svelte';
   import LevelMeter from './LevelMeter.svelte';
@@ -28,6 +28,9 @@
   let speechMs = 0;
 
   let nextSegmentId = 1;
+  // True when the current recording session was started via the global hotkey;
+  // those transcripts get auto-pasted into the focused app.
+  let pasteOnComplete = false;
 
   function frameMs(samples) {
     return (samples / inputSampleRate) * 1000;
@@ -77,6 +80,7 @@
     await teardown();
     micLevel.set(0);
     appState.set('idle');
+    pasteOnComplete = false;
   }
 
   async function teardown() {
@@ -152,8 +156,9 @@
     const id = nextSegmentId++;
     transcript.update((segs) => [...segs, { id, text: '…', pending: true }]);
 
+    const shouldPaste = pasteOnComplete;
     transcribe(pcm)
-      .then((text) => {
+      .then(async (text) => {
         const clean = (text || '').trim();
         transcript.update((segs) =>
           segs.map((s) =>
@@ -162,6 +167,13 @@
               : s
           )
         );
+        if (shouldPaste && clean) {
+          try {
+            await pasteText(clean);
+          } catch (e) {
+            lastError.set({ kind: 'paste', message: String(e) });
+          }
+        }
       })
       .catch((e) => {
         transcript.update((segs) =>
@@ -188,12 +200,27 @@
     toggleRecording();
   }
 
-  onMount(() => {
+  let unlistenHotkey = null;
+
+  onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
+    // Hold-to-record via global hotkey (Cmd+Shift+Space on macOS).
+    unlistenHotkey = await onHotkey({
+      onDown: () => {
+        if ($appState === 'idle' || $appState === 'error') {
+          pasteOnComplete = true;
+          startRecording();
+        }
+      },
+      onUp: () => {
+        if ($appState === 'recording') stopRecording();
+      },
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
+    if (unlistenHotkey) unlistenHotkey();
     teardown();
   });
 </script>
@@ -208,7 +235,7 @@
   </div>
 
   <p class="hint">
-    Press <kbd>Space</kbd> to toggle. Pauses of ~0.8s flush an utterance.
+    Press <kbd>Space</kbd> to toggle, or hold <kbd>⌃⌥Space</kbd> globally to record.
   </p>
 
   <TranscriptView />
