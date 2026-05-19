@@ -98,3 +98,11 @@ export async function getHotkey() {
 export async function setHotkey(accel) {
   return await invoke('set_hotkey', { accel });
 }
+
+export async function getFnHotkeyEnabled() {
+  return await invoke('get_fn_hotkey_enabled');
+}
+
+export async function setFnHotkeyEnabled(enabled) {
+  return await invoke('set_fn_hotkey_enabled', { enabled });
+}

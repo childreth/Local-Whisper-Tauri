@@ -10,12 +10,17 @@ pub const DEFAULT_HOTKEY: &str = "Control+Alt+Space";
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
     pub hotkey: String,
+    /// When true, use a CGEventTap to bind fn + Shift as the hold-to-record
+    /// chord and ignore `hotkey`. macOS-only.
+    #[serde(default)]
+    pub use_fn_hotkey: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             hotkey: DEFAULT_HOTKEY.to_string(),
+            use_fn_hotkey: false,
         }
     }
 }

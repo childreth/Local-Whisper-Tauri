@@ -1,6 +1,11 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { getHotkey, setHotkey } from './tauri-bridge.js';
+  import {
+    getHotkey,
+    setHotkey,
+    getFnHotkeyEnabled,
+    setFnHotkeyEnabled,
+  } from './tauri-bridge.js';
   import { lastError } from './stores.js';
 
   // Accelerator string as the backend stores it, e.g. "Control+Alt+Space".
@@ -9,6 +14,8 @@
   let capturedMods = []; // ['Control', 'Alt']
   let capturedKey = '';  // 'Space', 'KeyA', 'F5'
   let saving = false;
+  let fnEnabled = false;
+  let fnBusy = false;
 
   // Map Tauri/W3C names to glyphs used by macOS keycaps.
   const MOD_GLYPH = {
@@ -37,8 +44,25 @@
   async function load() {
     try {
       current = await getHotkey();
+      fnEnabled = await getFnHotkeyEnabled();
     } catch (e) {
       lastError.set({ kind: 'hotkey', message: String(e) });
+    }
+  }
+
+  async function toggleFn(e) {
+    const next = e.target.checked;
+    fnBusy = true;
+    try {
+      await setFnHotkeyEnabled(next);
+      fnEnabled = next;
+      if (next && editing) endEdit();
+    } catch (err) {
+      lastError.set({ kind: 'hotkey', message: String(err) });
+      // Revert checkbox
+      e.target.checked = !next;
+    } finally {
+      fnBusy = false;
     }
   }
 
@@ -145,47 +169,89 @@
 </script>
 
 <div class="card">
-  <div class="text">
-    <div class="title">Push to talk</div>
-    <div class="desc">Hold this shortcut globally to dictate into the focused app.</div>
-  </div>
+  <div class="row">
+    <div class="text">
+      <div class="title">Push to talk</div>
+      <div class="desc">Hold this shortcut globally to dictate into the focused app.</div>
+    </div>
 
-  <div class="binding" class:editing>
-    {#if editing && capturedMods.length === 0 && !capturedKey}
-      <span class="hint">Press a shortcut…</span>
-    {:else}
-      {#each display.mods as m}
-        <kbd>{modLabel(m)}</kbd>
-      {/each}
-      {#if display.key}
-        <kbd>{keyLabel(display.key)}</kbd>
+    <div class="binding" class:editing class:disabled={fnEnabled}>
+      {#if fnEnabled}
+        <kbd>fn</kbd>
+        <kbd>⇧</kbd>
+      {:else if editing && capturedMods.length === 0 && !capturedKey}
+        <span class="hint">Press a shortcut…</span>
+      {:else}
+        {#each display.mods as m}
+          <kbd>{modLabel(m)}</kbd>
+        {/each}
+        {#if display.key}
+          <kbd>{keyLabel(display.key)}</kbd>
+        {/if}
       {/if}
-    {/if}
 
-    {#if !editing}
-      <button class="icon" on:click={startEdit} title="Edit shortcut">✎</button>
-    {:else}
-      <button class="icon" on:click={cancel} title="Cancel (Esc)">✕</button>
-      <button class="icon save" on:click={save} disabled={!canSave || saving} title="Save">
-        ✓
-      </button>
-    {/if}
+      {#if !editing && !fnEnabled}
+        <button class="icon" on:click={startEdit} title="Edit shortcut">✎</button>
+      {:else if editing}
+        <button class="icon" on:click={cancel} title="Cancel (Esc)">✕</button>
+        <button class="icon save" on:click={save} disabled={!canSave || saving} title="Save">
+          ✓
+        </button>
+      {/if}
+    </div>
   </div>
+
+  <label class="toggle">
+    <input type="checkbox" checked={fnEnabled} on:change={toggleFn} disabled={fnBusy} />
+    <span class="toggle-text">
+      <strong>Use fn + Shift</strong>
+      <span class="desc">Apple dictation-style binding. Uses a CGEventTap (requires Accessibility permission) since macOS doesn't expose fn through standard shortcut APIs. Overrides the chord above.</span>
+    </span>
+  </label>
 </div>
 
 <style>
   .card {
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
     padding: 1rem 1.25rem;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
   }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
   .text {
     flex: 1;
     min-width: 0;
+  }
+  .toggle {
+    display: flex;
+    gap: 0.625rem;
+    align-items: flex-start;
+    cursor: pointer;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+  .toggle input {
+    margin-top: 0.1875rem;
+  }
+  .toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-size: 0.8125rem;
+  }
+  .toggle-text strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .binding.disabled {
+    opacity: 0.5;
   }
   .title {
     font-size: 0.9375rem;

@@ -1,4 +1,6 @@
 mod error;
+#[cfg(target_os = "macos")]
+mod fnhotkey;
 mod model;
 mod paste;
 mod settings;
@@ -20,6 +22,11 @@ pub struct AppState {
     // The currently-registered global shortcut. The handler reads from this so
     // the user can rebind without restarting the app.
     hotkey: Mutex<Shortcut>,
+    // True when we're using the fn+Shift CGEventTap instead of the standard
+    // global-shortcut plugin. macOS only; always false on other platforms.
+    fn_hotkey_enabled: Mutex<bool>,
+    #[cfg(target_os = "macos")]
+    fn_hotkey: Mutex<Option<fnhotkey::FnHotkey>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -51,6 +58,9 @@ pub fn run() {
             whisper: Mutex::new(None),
             active_model: Mutex::new(model::DEFAULT_MODEL_ID.to_string()),
             hotkey: Mutex::new(initial_hotkey),
+            fn_hotkey_enabled: Mutex::new(false),
+            #[cfg(target_os = "macos")]
+            fn_hotkey: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             transcribe,
@@ -62,6 +72,8 @@ pub fn run() {
             set_active_model,
             get_hotkey,
             set_hotkey,
+            get_fn_hotkey_enabled,
+            set_fn_hotkey_enabled,
         ])
         .setup(move |app| {
             // If the model is already downloaded, load it in the background so
@@ -78,6 +90,16 @@ pub fn run() {
             let saved = settings::load(app.handle());
             let hotkey = Shortcut::from_str(&saved.hotkey).unwrap_or(initial_hotkey);
             *app.state::<AppState>().hotkey.lock().unwrap() = hotkey;
+
+            #[cfg(target_os = "macos")]
+            if saved.use_fn_hotkey {
+                *app.state::<AppState>().fn_hotkey_enabled.lock().unwrap() = true;
+                *app.state::<AppState>().fn_hotkey.lock().unwrap() =
+                    Some(fnhotkey::FnHotkey::start(app.handle().clone()));
+            } else if let Err(e) = app.global_shortcut().register(hotkey) {
+                eprintln!("global hotkey registration failed: {e}");
+            }
+            #[cfg(not(target_os = "macos"))]
             if let Err(e) = app.global_shortcut().register(hotkey) {
                 eprintln!("global hotkey registration failed: {e}");
             }
@@ -249,16 +271,85 @@ fn set_hotkey(
     let new = Shortcut::from_str(&accel)
         .map_err(|e| TranscribeError::Other(format!("invalid shortcut '{accel}': {e}")))?;
 
+    let fn_enabled = *state.fn_hotkey_enabled.lock().unwrap();
     let old = { *state.hotkey.lock().unwrap() };
     if old != new {
-        let gs = app.global_shortcut();
-        let _ = gs.unregister(old);
-        gs.register(new)
-            .map_err(|e| TranscribeError::Other(format!("register hotkey: {e}")))?;
+        // Only touch the standard shortcut registration when the fn-hotkey is
+        // off. Otherwise the user is just updating the fallback for later.
+        if !fn_enabled {
+            let gs = app.global_shortcut();
+            let _ = gs.unregister(old);
+            gs.register(new)
+                .map_err(|e| TranscribeError::Other(format!("register hotkey: {e}")))?;
+        }
         *state.hotkey.lock().unwrap() = new;
     }
 
-    settings::save(&app, &settings::Settings { hotkey: accel })?;
+    settings::save(
+        &app,
+        &settings::Settings {
+            hotkey: accel,
+            use_fn_hotkey: fn_enabled,
+        },
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_fn_hotkey_enabled(state: tauri::State<'_, AppState>) -> bool {
+    *state.fn_hotkey_enabled.lock().unwrap()
+}
+
+#[tauri::command]
+#[allow(unused_variables)]
+fn set_fn_hotkey_enabled(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), TranscribeError> {
+    #[cfg(not(target_os = "macos"))]
+    if enabled {
+        return Err(TranscribeError::Other(
+            "fn hotkey is macOS-only".into(),
+        ));
+    }
+
+    let was = *state.fn_hotkey_enabled.lock().unwrap();
+    if was == enabled {
+        return Ok(());
+    }
+
+    let current = { *state.hotkey.lock().unwrap() };
+
+    #[cfg(target_os = "macos")]
+    {
+        if enabled {
+            // Tear down the standard shortcut so we don't have two systems
+            // listening at once, then start the event tap.
+            let _ = app.global_shortcut().unregister(current);
+            *state.fn_hotkey.lock().unwrap() =
+                Some(fnhotkey::FnHotkey::start(app.clone()));
+        } else {
+            // Stop the tap, then restore the configured standard shortcut.
+            if let Some(h) = state.fn_hotkey.lock().unwrap().take() {
+                h.stop();
+            }
+            app.global_shortcut()
+                .register(current)
+                .map_err(|e| TranscribeError::Other(format!("register hotkey: {e}")))?;
+        }
+    }
+
+    *state.fn_hotkey_enabled.lock().unwrap() = enabled;
+
+    let accel = current.to_string();
+    settings::save(
+        &app,
+        &settings::Settings {
+            hotkey: accel,
+            use_fn_hotkey: enabled,
+        },
+    )?;
     Ok(())
 }
 
