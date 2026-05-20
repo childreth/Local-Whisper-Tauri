@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { appState, transcript, micLevel, lastError } from './stores.js';
+  import { appState, transcript, micLevel, lastError, preferences } from './stores.js';
   import { transcribe, onHotkey, pasteText, setIndicatorVisible } from './tauri-bridge.js';
   import { emit } from '@tauri-apps/api/event';
   import { downsample, floatToInt16Bytes, rms } from './audio-utils.js';
@@ -10,14 +10,18 @@
 
   // === Tunables ===
   const TARGET_SAMPLE_RATE = 16000;
-  const SILENCE_THRESHOLD = 0.02; // RMS below this = silence
-  const SILENCE_DURATION_MS = 800; // flush after this much silence
   const MIN_UTTERANCE_MS = 300; // ignore blips shorter than this
   const MAX_UTTERANCE_MS = 15000; // safety flush
   // How much audio history to keep around for pre-roll. Captures words spoken
   // at the instant the user hits the hotkey, before the worklet has begun
   // forwarding frames for the new "recording" session.
   const PREROLL_MS = 500;
+
+  // Silence detection is user-tunable via the Preferences card. RMS below
+  // silenceThreshold counts as silence; an utterance flushes after
+  // silenceDurationMs of continuous silence.
+  $: silenceThreshold = $preferences.silenceThreshold;
+  $: silenceDurationMs = $preferences.silenceDurationMs;
 
   // === Audio pipeline (warmed once, kept alive for the app's lifetime) ===
   let audioCtx = null;
@@ -102,7 +106,7 @@
       speechMs = 0;
       for (const f of frames) {
         const ms = frameMs(f.length);
-        if (rms(f) < SILENCE_THRESHOLD) {
+        if (rms(f) < silenceThreshold) {
           silentMs += ms;
         } else {
           silentMs = 0;
@@ -206,7 +210,7 @@
     frameSamples += frame.length;
 
     const ms = frameMs(frame.length);
-    if (level < SILENCE_THRESHOLD) {
+    if (level < silenceThreshold) {
       silentMs += ms;
     } else {
       silentMs = 0;
@@ -215,7 +219,7 @@
 
     const totalMs = frameMs(frameSamples);
     const shouldFlush =
-      (silentMs >= SILENCE_DURATION_MS && speechMs >= MIN_UTTERANCE_MS) ||
+      (silentMs >= silenceDurationMs && speechMs >= MIN_UTTERANCE_MS) ||
       totalMs >= MAX_UTTERANCE_MS;
 
     if (shouldFlush) {
@@ -234,7 +238,7 @@
     resetUtterance();
 
     // Drop if overall energy is too low (false-positive trigger).
-    if (rms(combined) < SILENCE_THRESHOLD * 0.5) return;
+    if (rms(combined) < silenceThreshold * 0.5) return;
 
     const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
     const pcm = floatToInt16Bytes(resampled);

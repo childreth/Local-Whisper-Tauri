@@ -8,6 +8,7 @@
   import PasteTester from './lib/PasteTester.svelte';
   import ModelPicker from './lib/ModelPicker.svelte';
   import HotkeySettings from './lib/HotkeySettings.svelte';
+  import Preferences from './lib/Preferences.svelte';
 
   onMount(async () => {
     try {
@@ -34,6 +35,7 @@
     <div class="stack">
       <ModelPicker />
       <HotkeySettings />
+      <Preferences />
       <Transcriber />
       <PasteTester />
     </div>
