@@ -19,16 +19,25 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
 }
 
-body {
+/* Main window styles */
+body.main-window {
+  overflow: hidden;
+  background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Make the body the scroll viewport so the window scrolls when the content
-     (model picker, settings, transcript list) is taller than the window. */
+}
+
+/* #app is the scroll viewport. `overflow` set on <html>/<body> propagates to
+   the document/viewport, whose scrolling is unreliable in this WKWebView — so
+   we lock those at overflow:hidden and scroll a plain block element instead.
+   Its height is pinned to the body height (100%) so it never depends on the
+   html/body height chain. */
+body.main-window #app {
+  height: 100%;
   overflow-y: auto;
 }
 

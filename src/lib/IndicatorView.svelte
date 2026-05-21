@@ -53,7 +53,7 @@
 </div>
 
 <style>
-  :global(html), :global(body) {
+  :global(body.indicator) {
     margin: 0;
     padding: 0;
     background: transparent !important;
@@ -61,7 +61,7 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  :global(#app) {
+  :global(body.indicator #app) {
     width: 100vw;
     height: 100vh;
     display: flex;
