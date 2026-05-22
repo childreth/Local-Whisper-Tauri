@@ -227,6 +227,8 @@
     }
   }
 
+  let transcriptionQueue = Promise.resolve();
+
   function flushUtterance() {
     // Concatenate frames into a single Float32Array.
     const combined = new Float32Array(frameSamples);
@@ -247,34 +249,39 @@
     transcript.update((segs) => [...segs, { id, text: '…', pending: true }]);
 
     const shouldPaste = pasteOnComplete;
-    transcribe(pcm)
-      .then(async (text) => {
-        const clean = (text || '').trim();
-        transcript.update((segs) =>
-          segs.map((s) =>
-            s.id === id
-              ? { ...s, text: clean || '(silence)', pending: false }
-              : s
-          )
-        );
-        if (shouldPaste && clean) {
-          try {
-            await pasteText(clean);
-          } catch (e) {
-            lastError.set({ kind: 'paste', message: String(e) });
+    
+    // Serialize requests so whisper.cpp only processes one utterance at a time.
+    // Concurrent evaluation thrashes the CPU and causes massive memory spikes.
+    transcriptionQueue = transcriptionQueue.then(() => {
+      return transcribe(pcm)
+        .then(async (text) => {
+          const clean = (text || '').trim();
+          transcript.update((segs) =>
+            segs.map((s) =>
+              s.id === id
+                ? { ...s, text: clean || '(silence)', pending: false }
+                : s
+            )
+          );
+          if (shouldPaste && clean) {
+            try {
+              await pasteText(clean);
+            } catch (e) {
+              lastError.set({ kind: 'paste', message: String(e) });
+            }
           }
-        }
-      })
-      .catch((e) => {
-        transcript.update((segs) =>
-          segs.map((s) =>
-            s.id === id
-              ? { ...s, text: '⚠️ transcription failed', pending: false }
-              : s
-          )
-        );
-        lastError.set({ kind: 'transcribe', message: String(e) });
-      });
+        })
+        .catch((e) => {
+          transcript.update((segs) =>
+            segs.map((s) =>
+              s.id === id
+                ? { ...s, text: '⚠️ transcription failed', pending: false }
+                : s
+            )
+          );
+          lastError.set({ kind: 'transcribe', message: String(e) });
+        });
+    });
   }
 
   function toggleRecording() {

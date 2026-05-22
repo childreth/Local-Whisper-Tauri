@@ -25,8 +25,8 @@
       {
         "label": "indicator",
         "url": "index.html?indicator=1",
-        "width": 200,
-        "height": 56,
+        "width": 320,
+        "height": 160,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
