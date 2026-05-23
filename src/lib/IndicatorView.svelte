@@ -127,14 +127,16 @@
     
     /* Inactive state (hidden/recording stopped) */
     opacity: 0;
-    transform: scale(0.6);
-    transition: opacity 0.15s ease-out, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform: scale(0.4);
+    filter: blur(5px);
+    transition: opacity 0.15s ease-out, transform 0.5s cubic-bezier(.39,0,.17,1), filter 0.5s ease-out;
   }
 
   .pill.active {
     /* Active state (recording) */
     opacity: 1;
     transform: scale(1);
+    filter: blur(0px);
   }
 
   .bar {

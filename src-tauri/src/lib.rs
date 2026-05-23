@@ -364,7 +364,7 @@ fn set_indicator_visible(app: AppHandle, visible: bool) -> Result<(), Transcribe
         if let Ok(Some(monitor)) = win.current_monitor() {
             let mon_size = monitor.size();
             let scale = monitor.scale_factor();
-            let x = (mon_size.width as f64) / scale / 2.0 - 100.0;
+            let x = (mon_size.width as f64) / scale / 2.0 - 160.0;
             let y = 8.0;
             let _ = win.set_position(tauri::LogicalPosition::new(x, y));
         }

@@ -90,9 +90,19 @@
 
   async function startRecording() {
     try {
+      // Self-heal pipeline if macOS sleep killed the stream or suspended the context
+      if (pipelineReady) {
+        const track = mediaStream?.getAudioTracks()[0];
+        if (!track || track.readyState === 'ended') {
+          console.warn('Audio track ended (likely from sleep), re-initializing...');
+          await teardown();
+        } else if (audioCtx && audioCtx.state === 'suspended') {
+          try { await audioCtx.resume(); } catch (e) { console.warn('resume failed', e); }
+        }
+      }
+
       if (!pipelineReady) {
-        // First time, or permission was previously denied. Cold-start it now —
-        // first word may still be partially lost on this single call.
+        // First time, or permission was previously denied, or we just tore down a dead stream.
         await initPipeline();
       }
 
