@@ -1,0 +1,3 @@
+## 2026-06-08 - Audio processing hot loops
+**Learning:** Svelte/JS apps using `DataView.setInt16` for converting `Float32Array` audio frames into PCM integers inside a hot loop is measurably slower than direct assignment via `Int16Array` (by about ~30-40%). Similarly, `Math.floor/Math.min` in per-sample loops (e.g. downsampling) and redundant index accesses are bottlenecks.
+**Action:** When working on real-time audio pipelines in JS, verify architecture endianness and use typed array views (like `Int16Array`) to bypass `DataView` overhead if possible. Prefer simple ternary operators over `Math.min/max` in hot per-sample loops.
