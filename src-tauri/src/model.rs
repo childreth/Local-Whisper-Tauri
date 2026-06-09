@@ -16,6 +16,7 @@ pub const MODELS: &[ModelInfo] = &[
         label: "Base (74M)",
         file: "ggml-base.en.bin",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+        hash: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
         size_mb: 142,
     },
     ModelInfo {
@@ -23,6 +24,7 @@ pub const MODELS: &[ModelInfo] = &[
         label: "Small (244M)",
         file: "ggml-small.en.bin",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+        hash: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
         size_mb: 466,
     },
 ];
@@ -37,6 +39,8 @@ pub struct ModelInfo {
     pub file: &'static str,
     #[serde(skip)]
     pub url: &'static str,
+    #[serde(skip)]
+    pub hash: &'static str,
     pub size_mb: u64,
 }
 
@@ -115,6 +119,15 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
     file.flush().await?;
     drop(file);
 
+    let calculated_hash = hex_lower(&hasher.finalize());
+    if calculated_hash != info.hash {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(TranscribeError::Download(format!(
+            "hash mismatch for model {}: expected {}, got {}",
+            info.id, info.hash, calculated_hash
+        )));
+    }
+
     let _ = app.emit(
         "model:progress",
         serde_json::json!({
@@ -128,7 +141,6 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
     Ok(path)
 }
 
-#[allow(dead_code)]
 fn hex_lower(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut s = String::with_capacity(bytes.len() * 2);
