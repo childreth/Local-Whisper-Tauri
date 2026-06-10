@@ -263,12 +263,14 @@ async fn transcribe(
     }
 
     // Decode Int16 LE bytes to f32 in [-1.0, 1.0] — whisper-rs wants f32.
-    let n = pcm.len() / 2;
-    let mut samples = Vec::with_capacity(n);
-    for i in 0..n {
-        let s = i16::from_le_bytes([pcm[i * 2], pcm[i * 2 + 1]]);
-        samples.push(s as f32 / 32768.0);
-    }
+    // Use chunks_exact instead of manual indexing to elide bounds checks for better performance.
+    let samples: Vec<f32> = pcm
+        .chunks_exact(2)
+        .map(|chunk| {
+            let s = i16::from_le_bytes([chunk[0], chunk[1]]);
+            s as f32 / 32768.0
+        })
+        .collect();
 
     // Grab the WhisperContext (Arc) while holding the lock briefly.
     let ctx = {
