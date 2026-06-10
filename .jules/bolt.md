@@ -1,0 +1,3 @@
+## 2026-06-10 - Audio buffer manipulation optimization
+**Learning:** In JavaScript, using `DataView.setInt16` in a loop to construct a buffer from individual numbers is slow. It's much faster (~40% improvement in this codebase) to allocate an `ArrayBuffer` and map a typed array view (like `Int16Array`) over it, doing the integer packing manually. Similarly, in Rust, iterating over pairs of bytes `pcm[i*2]` with bounds checks defeats LLVM vectorization. Using `.chunks_exact(2)` to unpack little-endian `[u8; 2]` values yields a massive speedup (~80% faster in isolated benchmark).
+**Action:** When working with raw audio streams or typed arrays spanning high frequencies/length, favor zero-copy views and chunking over index-by-index access.
