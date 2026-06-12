@@ -10,10 +10,13 @@ export function downsample(input, inputRate, outputRate) {
   const ratio = inputRate / outputRate;
   const outLength = Math.floor(input.length / ratio);
   const output = new Float32Array(outLength);
+  const maxIdx = input.length - 1;
+  // Optimization: use bitwise OR to floor idx, and pre-calculate maxIdx
+  // which runs significantly faster in tight loops compared to Math.floor()
   for (let i = 0; i < outLength; i++) {
     const idx = i * ratio;
-    const lo = Math.floor(idx);
-    const hi = Math.min(lo + 1, input.length - 1);
+    const lo = idx | 0;
+    const hi = lo < maxIdx ? lo + 1 : maxIdx;
     const frac = idx - lo;
     output[i] = input[lo] * (1 - frac) + input[hi] * frac;
   }

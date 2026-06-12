@@ -188,16 +188,27 @@
   }
 
   let lastLevelEmit = 0;
+  let lastUIRender = 0;
   function handleFrame(frame) {
     const level = rms(frame);
     const recording = $appState === 'recording';
 
     // Mic meter only meaningful while we're "live" — keep it at zero in pre-roll
     // mode so the meter doesn't suggest the app is recording when it isn't.
-    micLevel.set(recording ? level : 0);
+    const now = performance.now();
+
+    // Throttle Svelte store UI updates to ~30fps to avoid thrashing the main thread
+    // since this AudioWorklet callback fires every ~3ms.
+    if (recording) {
+      if (now - lastUIRender > 33) {
+        micLevel.set(level);
+        lastUIRender = now;
+      }
+    } else if ($micLevel !== 0) {
+      micLevel.set(0);
+    }
 
     if (recording && pasteOnComplete) {
-      const now = performance.now();
       if (now - lastLevelEmit > 40) {
         lastLevelEmit = now;
         emit('indicator:level', { level, transcribing: false }).catch(() => {});
