@@ -192,14 +192,15 @@
     const level = rms(frame);
     const recording = $appState === 'recording';
 
-    // Mic meter only meaningful while we're "live" — keep it at zero in pre-roll
-    // mode so the meter doesn't suggest the app is recording when it isn't.
-    micLevel.set(recording ? level : 0);
-
-    if (recording && pasteOnComplete) {
-      const now = performance.now();
-      if (now - lastLevelEmit > 40) {
-        lastLevelEmit = now;
+    const now = performance.now();
+    // Mic meter only meaningful while we're "live".
+    // Optimization: Throttle Svelte store updates to ~25fps (every 40ms). The
+    // AudioWorklet emits frames ~333 times a second. Unthrottled store updates
+    // cause massive main thread layout/paint thrashing for the visual LevelMeter.
+    if (now - lastLevelEmit > 40 || !recording) {
+      lastLevelEmit = now;
+      micLevel.set(recording ? level : 0);
+      if (recording && pasteOnComplete) {
         emit('indicator:level', { level, transcribing: false }).catch(() => {});
       }
     }
