@@ -4,3 +4,7 @@
 ## 2024-05-18 - [Throttling High-Frequency UI Events]
 **Learning:** AudioWorklet frames are emitted ~333 times per second (at 48kHz). Syncing these unthrottled frames directly into a reactive Svelte store (`micLevel.set()`) forces the main thread to recalculate and repaint the DOM UI hundreds of times a second, which vastly exceeds the screen's 60Hz refresh rate. This wastes main thread CPU and can slow down critical execution loops.
 **Action:** Always throttle high-frequency data streams (like audio buffers, scroll, or mouse events) to a reasonable frame rate (e.g., 25fps or 40ms) before pushing updates to reactive frontend state systems.
+
+## 2024-06-14 - Direct Float32 Buffer Passing over Tauri IPC
+**Learning:** In audio processing apps across Tauri where a Float32Array on the frontend is sent to a backend expecting `f32` (like whisper-rs), manually packing values into Int16 `Uint8Array` using JavaScript `for` loops adds unnecessary execution time overhead. Instead, Tauri allows sending the byte representation directly via `new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength)` reducing CPU spikes when parsing audio chunks.
+**Action:** Use typed array backing buffers directly across FFI/IPC boundaries rather than manually serializing elements in hot loops. Always try to match the backend's expected binary format directly.

@@ -256,18 +256,25 @@ async fn transcribe(
     if pcm.is_empty() {
         return Err(TranscribeError::AudioTooShort(0));
     }
-    if pcm.len() % 2 != 0 {
+    if pcm.len() % 4 != 0 {
         return Err(TranscribeError::Other(
-            "PCM byte length must be even (Int16 samples)".into(),
+            "PCM byte length must be a multiple of 4 (f32 samples)".into(),
         ));
     }
 
-    // Decode Int16 LE bytes to f32 in [-1.0, 1.0] — whisper-rs wants f32.
-    let n = pcm.len() / 2;
+    // Decode f32 LE bytes directly — whisper-rs wants f32.
+    let n = pcm.len() / 4;
     let mut samples = Vec::with_capacity(n);
-    for i in 0..n {
-        let s = i16::from_le_bytes([pcm[i * 2], pcm[i * 2 + 1]]);
-        samples.push(s as f32 / 32768.0);
+    if pcm.as_ptr().align_offset(std::mem::align_of::<f32>()) == 0 {
+        let ptr = pcm.as_ptr() as *const f32;
+        unsafe {
+            samples.extend_from_slice(std::slice::from_raw_parts(ptr, n));
+        }
+    } else {
+        for chunk in pcm.chunks_exact(4) {
+            let s = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            samples.push(s);
+        }
     }
 
     // Grab the WhisperContext (Arc) while holding the lock briefly.
