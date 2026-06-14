@@ -3,7 +3,7 @@
   import { appState, transcript, micLevel, lastError, preferences } from './stores.js';
   import { transcribe, onHotkey, pasteText, setIndicatorVisible } from './tauri-bridge.js';
   import { emit } from '@tauri-apps/api/event';
-  import { downsample, floatToInt16Bytes, rms } from './audio-utils.js';
+  import { downsample, rms } from './audio-utils.js';
   import RecordButton from './RecordButton.svelte';
   import LevelMeter from './LevelMeter.svelte';
   import TranscriptView from './TranscriptView.svelte';
@@ -254,7 +254,7 @@
     if (rms(combined) < silenceThreshold * 0.5) return;
 
     const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
-    const pcm = floatToInt16Bytes(resampled);
+    const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
 
     const id = nextSegmentId++;
     transcript.update((segs) => [...segs, { id, text: '…', pending: true }]);
