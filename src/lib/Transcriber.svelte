@@ -188,24 +188,16 @@
   }
 
   let lastLevelEmit = 0;
+  let wasRecording = false;
+
   function handleFrame(frame) {
-    const level = rms(frame);
     const recording = $appState === 'recording';
 
-    const now = performance.now();
-    // Mic meter only meaningful while we're "live".
-    // Optimization: Throttle Svelte store updates to ~25fps (every 40ms). The
-    // AudioWorklet emits frames ~333 times a second. Unthrottled store updates
-    // cause massive main thread layout/paint thrashing for the visual LevelMeter.
-    if (now - lastLevelEmit > 40 || !recording) {
-      lastLevelEmit = now;
-      micLevel.set(recording ? level : 0);
-      if (recording && pasteOnComplete) {
-        emit('indicator:level', { level, transcribing: false }).catch(() => {});
-      }
-    }
-
     if (!recording) {
+      // Performance optimization:
+      // Skip the O(n) rms() computation, performance.now() call, and DOM
+      // variable checks entirely when we aren't recording.
+
       // Keep a rolling window of recent audio so a hotkey press can grab the
       // last PREROLL_MS to capture words spoken at the moment of trigger.
       preRoll.push(frame);
@@ -214,7 +206,28 @@
         preRollSamples -= preRoll[0].length;
         preRoll.shift();
       }
+
+      if (wasRecording) {
+        wasRecording = false;
+        micLevel.set(0);
+      }
+
       return;
+    }
+
+    wasRecording = true;
+    const level = rms(frame);
+    const now = performance.now();
+    // Mic meter only meaningful while we're "live".
+    // Optimization: Throttle Svelte store updates to ~25fps (every 40ms). The
+    // AudioWorklet emits frames ~333 times a second. Unthrottled store updates
+    // cause massive main thread layout/paint thrashing for the visual LevelMeter.
+    if (now - lastLevelEmit > 40) {
+      lastLevelEmit = now;
+      micLevel.set(level);
+      if (pasteOnComplete) {
+        emit('indicator:level', { level, transcribing: false }).catch(() => {});
+      }
     }
 
     frames.push(frame);
