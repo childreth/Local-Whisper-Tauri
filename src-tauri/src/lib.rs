@@ -250,9 +250,14 @@ async fn set_active_model(
 
 #[tauri::command]
 async fn transcribe(
-    pcm: Vec<u8>,
+    req: tauri::ipc::Request<'_>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, TranscribeError> {
+    let pcm = match req.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes,
+        _ => return Err(TranscribeError::Other("Expected raw binary payload".into())),
+    };
+
     if pcm.is_empty() {
         return Err(TranscribeError::AudioTooShort(0));
     }

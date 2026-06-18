@@ -7,9 +7,9 @@ import { listen } from '@tauri-apps/api/event';
  * @returns {Promise<string>} transcript text
  */
 export async function transcribe(pcm) {
-  // Tauri v2 IPC serializes binary as a number array. For ~1-2s of 16kHz Int16
-  // (32-64KB) this is fine; for longer audio consider Channel<T> instead.
-  return await invoke('transcribe', { pcm: Array.from(pcm) });
+  // Direct binary IPC to avoid JSON serialization overhead (JSON.stringify mapping).
+  // The Rust backend expects a raw Request and reads the body directly.
+  return await invoke('transcribe', pcm);
 }
 
 /**
