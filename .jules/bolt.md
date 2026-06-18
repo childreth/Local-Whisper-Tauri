@@ -14,3 +14,7 @@
 ## 2024-06-16 - [Direct Binary IPC in Tauri v2]
 **Learning:** Passing a `Uint8Array` directly to `invoke('command', pcm)` allows Tauri to skip JSON serialization, improving performance for binary payloads. However, the JS variable must be a `Uint8Array` or `ArrayBuffer`; typed arrays like `Int16Array` will still be JSON-serialized into a dictionary map. On the backend, you must use `tauri::ipc::Request<'_>` and pattern match `req.body()` against `tauri::ipc::InvokeBody::Raw(bytes)` to get the `&Vec<u8>`. The memory slice remains valid and zero-copy pointer casting like `bytes.as_ptr()` works flawlessly.
 **Action:** When migrating endpoints to raw binary IPC, verify the exact JS typed array class before invoking, and use `tauri::ipc::Request` on the Rust side to safely borrow the `&Vec<u8>` without cloning.
+
+## 2024-11-21 - Optimize JavaScript Math in Audio Hot Loops
+**Learning:** In audio DSP hot loops running hundreds or thousands of times (like resampling `Float32Array`s), `Math.floor` and `Math.min` introduce measurable function call overhead in JS/V8.
+**Action:** Replace `Math.floor(x)` with `x | 0` (for positive floats that fit in 32-bit integers) and use simple `if/else` checks instead of `Math.min`/`Math.max` in hot DSP paths to guarantee execution speed and prevent JIT de-optimizations.

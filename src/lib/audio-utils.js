@@ -8,12 +8,16 @@
 export function downsample(input, inputRate, outputRate) {
   if (inputRate === outputRate) return input;
   const ratio = inputRate / outputRate;
-  const outLength = Math.floor(input.length / ratio);
+  const outLength = (input.length / ratio) | 0;
   const output = new Float32Array(outLength);
+  const inLenMinus1 = input.length - 1;
   for (let i = 0; i < outLength; i++) {
     const idx = i * ratio;
-    const lo = Math.floor(idx);
-    const hi = Math.min(lo + 1, input.length - 1);
+    // Optimization: bitwise OR | 0 is significantly faster than Math.floor for positive integers
+    const lo = idx | 0;
+    let hi = lo + 1;
+    // Optimization: if/else is faster than Math.min in this hot loop
+    if (hi > inLenMinus1) hi = inLenMinus1;
     const frac = idx - lo;
     output[i] = input[lo] * (1 - frac) + input[hi] * frac;
   }
