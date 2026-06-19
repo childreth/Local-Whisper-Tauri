@@ -267,21 +267,6 @@ async fn transcribe(
         ));
     }
 
-    // Decode f32 LE bytes directly — whisper-rs wants f32.
-    let n = pcm.len() / 4;
-    let mut samples = Vec::with_capacity(n);
-    if pcm.as_ptr().align_offset(std::mem::align_of::<f32>()) == 0 {
-        let ptr = pcm.as_ptr() as *const f32;
-        unsafe {
-            samples.extend_from_slice(std::slice::from_raw_parts(ptr, n));
-        }
-    } else {
-        for chunk in pcm.chunks_exact(4) {
-            let s = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-            samples.push(s);
-        }
-    }
-
     // Grab the WhisperContext (Arc) while holding the lock briefly.
     let ctx = {
         let guard = state.whisper.lock().unwrap();
@@ -291,10 +276,33 @@ async fn transcribe(
         engine.context()
     };
 
+    // Clone the raw bytes to move them into the static spawn_blocking context.
+    let pcm_owned = pcm.clone();
+
     // Run inference off the async runtime — whisper is blocking + CPU-heavy.
-    let text = tokio::task::spawn_blocking(move || whisper::run_inference(&ctx, &samples))
-        .await
-        .map_err(|e| TranscribeError::Other(format!("join: {e}")))??;
+    let text = tokio::task::spawn_blocking(move || {
+        // Decode f32 LE bytes directly — whisper-rs wants f32.
+        let n = pcm_owned.len() / 4;
+
+        // Zero-copy optimization: if the memory is already properly aligned for f32,
+        // we can cast the pointer directly and borrow it as a &[f32] slice instead of
+        // allocating a new Vec<f32> and copying the memory over.
+        if pcm_owned.as_ptr().align_offset(std::mem::align_of::<f32>()) == 0 {
+            let ptr = pcm_owned.as_ptr() as *const f32;
+            let slice = unsafe { std::slice::from_raw_parts(ptr, n) };
+            whisper::run_inference(&ctx, slice)
+        } else {
+            // Fallback for unaligned memory: we must copy and reconstruct the floats
+            let mut samples = Vec::with_capacity(n);
+            for chunk in pcm_owned.chunks_exact(4) {
+                let s = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                samples.push(s);
+            }
+            whisper::run_inference(&ctx, &samples)
+        }
+    })
+    .await
+    .map_err(|e| TranscribeError::Other(format!("join: {e}")))??;
 
     Ok(text)
 }
