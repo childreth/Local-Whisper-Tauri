@@ -8,12 +8,13 @@
 export function downsample(input, inputRate, outputRate) {
   if (inputRate === outputRate) return input;
   const ratio = inputRate / outputRate;
-  const outLength = Math.floor(input.length / ratio);
+  const inLen = input.length;
+  const outLength = (inLen / ratio) | 0;
   const output = new Float32Array(outLength);
   for (let i = 0; i < outLength; i++) {
     const idx = i * ratio;
-    const lo = Math.floor(idx);
-    const hi = Math.min(lo + 1, input.length - 1);
+    const lo = idx | 0;
+    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
     const frac = idx - lo;
     output[i] = input[lo] * (1 - frac) + input[hi] * frac;
   }
