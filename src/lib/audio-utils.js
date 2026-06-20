@@ -11,13 +11,28 @@ export function downsample(input, inputRate, outputRate) {
   const inLen = input.length;
   const outLength = (inLen / ratio) | 0;
   const output = new Float32Array(outLength);
-  for (let i = 0; i < outLength; i++) {
+
+  // Optimization: Extract the bounds check from the hot loop.
+  // We can safely iterate up to outLength - 1 without hitting the boundary.
+  // Using lerp formulation (a + (b - a) * f) also saves execution time.
+  const safeOutLength = outLength - 1;
+  for (let i = 0; i < safeOutLength; i++) {
+    const idx = i * ratio;
+    const lo = idx | 0;
+    const frac = idx - lo;
+    output[i] = input[lo] + (input[lo + 1] - input[lo]) * frac;
+  }
+
+  // Handle the final sample safely
+  if (outLength > 0) {
+    const i = outLength - 1;
     const idx = i * ratio;
     const lo = idx | 0;
     const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
     const frac = idx - lo;
-    output[i] = input[lo] * (1 - frac) + input[hi] * frac;
+    output[i] = input[lo] + (input[hi] - input[lo]) * frac;
   }
+
   return output;
 }
 

@@ -17,3 +17,6 @@
 ## 2024-05-18 - [Optimizing Float loops in JS]
 **Learning:** In hot JavaScript loops processing large arrays (such as linear audio resampling), standard Math functions like `Math.floor` and `Math.min` add significant overhead per-sample.
 **Action:** When performing iterative numerical operations over large floating-point arrays, optimize by caching array properties (`length`) and replacing Math method calls with bitwise truncation (`| 0`) and inline conditionals. This avoids millions of function call allocations in tight loops.
+## 2026-06-20 - [Optimizing DSP Hot Loops in JS]
+**Learning:** In JavaScript hot loops processing large typed arrays (like audio linear downsampling), performing a boundary check (using a ternary operator like `hi = lo + 1 < inLen ? lo + 1 : inLen - 1`) on every single iteration adds massive overhead. Because downsampling implies the index will only exceed bounds at the very end of the array, the loop can be split to run safely up to `outLength - 1`, completely removing the branch logic. Furthermore, the standard linear interpolation math `a + (b - a) * f` is noticeably faster to execute than `a * (1 - f) + b * f`.
+**Action:** When writing or reviewing DSP loops in JavaScript, always move boundary checks outside the hot loop if the maximum safe index is statically calculable, and use optimized arithmetic formulations for lerp.
