@@ -36,9 +36,18 @@
   let activationPending = false;
 
   function tick() {
+    raf = requestAnimationFrame(tick);
+
+    // Performance optimization: skip reactive variable assignments (which trigger
+    // Svelte re-renders) when the indicator is fully hidden and silent. This prevents
+    // ~60fps background CPU thrashing.
+    if (!active && !activationPending && level < 0.001) {
+      level = 0;
+      return;
+    }
+
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
-    raf = requestAnimationFrame(tick);
   }
 
   onMount(async () => {
