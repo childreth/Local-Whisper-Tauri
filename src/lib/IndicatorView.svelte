@@ -36,9 +36,12 @@
   let activationPending = false;
 
   function tick() {
+    raf = requestAnimationFrame(tick);
+    // Optimization: skip Svelte reactive assignments when hidden/idle
+    // to prevent background CPU thrashing and continuous DOM recalculations
+    if (!active && level < 0.001) return;
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
-    raf = requestAnimationFrame(tick);
   }
 
   onMount(async () => {
