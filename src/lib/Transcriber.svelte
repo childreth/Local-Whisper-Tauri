@@ -39,17 +39,20 @@
   // === Per-utterance accumulator (only populated when actively recording) ===
   let frames = []; // Float32Array[]
   let frameSamples = 0;
-  let silentMs = 0;
-  let speechMs = 0;
+  let silentSamples = 0;
+  let speechSamples = 0;
 
   let nextSegmentId = 1;
   // True when the current recording session was started via the global hotkey;
   // those transcripts get auto-pasted into the focused app.
   let pasteOnComplete = false;
 
-  function frameMs(samples) {
-    return (samples / inputSampleRate) * 1000;
-  }
+  // Pre-calculate threshold sizes in raw sample counts to avoid doing floating
+  // point arithmetic (division by inputSampleRate) repeatedly in the hot loop.
+  $: maxPreRollSamples = (PREROLL_MS * inputSampleRate) / 1000;
+  $: silenceDurationSamples = (silenceDurationMs * inputSampleRate) / 1000;
+  $: minUtteranceSamples = (MIN_UTTERANCE_MS * inputSampleRate) / 1000;
+  $: maxUtteranceSamples = (MAX_UTTERANCE_MS * inputSampleRate) / 1000;
 
   // Open the mic, AudioContext, and worklet once. Idempotent — repeat calls
   // resolve immediately if the pipeline is already up.
@@ -112,15 +115,14 @@
       frameSamples = preRollSamples;
       // Recompute speech/silence accounting from the pre-roll so the silence
       // timer starts in the right state.
-      silentMs = 0;
-      speechMs = 0;
+      silentSamples = 0;
+      speechSamples = 0;
       for (const f of frames) {
-        const ms = frameMs(f.length);
         if (rms(f) < silenceThreshold) {
-          silentMs += ms;
+          silentSamples += f.length;
         } else {
-          silentMs = 0;
-          speechMs += ms;
+          silentSamples = 0;
+          speechSamples += f.length;
         }
       }
       preRoll = [];
@@ -143,7 +145,7 @@
 
   async function stopRecording() {
     // Flush any in-progress utterance that meets the minimum length.
-    if (speechMs >= MIN_UTTERANCE_MS) {
+    if (speechSamples >= minUtteranceSamples) {
       flushUtterance();
     }
     resetUtterance();
@@ -183,8 +185,8 @@
   function resetUtterance() {
     frames = [];
     frameSamples = 0;
-    silentMs = 0;
-    speechMs = 0;
+    silentSamples = 0;
+    speechSamples = 0;
   }
 
   let lastLevelEmit = 0;
@@ -202,7 +204,7 @@
       // last PREROLL_MS to capture words spoken at the moment of trigger.
       preRoll.push(frame);
       preRollSamples += frame.length;
-      while (preRoll.length > 0 && frameMs(preRollSamples - preRoll[0].length) >= PREROLL_MS) {
+      while (preRoll.length > 0 && (preRollSamples - preRoll[0].length) >= maxPreRollSamples) {
         preRollSamples -= preRoll[0].length;
         preRoll.shift();
       }
@@ -233,18 +235,19 @@
     frames.push(frame);
     frameSamples += frame.length;
 
-    const ms = frameMs(frame.length);
+    // Optimization: Track raw sample lengths instead of converting
+    // to milliseconds on every single AudioWorklet callback. This removes
+    // function call overhead and floating point divisions in the hot loop.
     if (level < silenceThreshold) {
-      silentMs += ms;
+      silentSamples += frame.length;
     } else {
-      silentMs = 0;
-      speechMs += ms;
+      silentSamples = 0;
+      speechSamples += frame.length;
     }
 
-    const totalMs = frameMs(frameSamples);
     const shouldFlush =
-      (silentMs >= silenceDurationMs && speechMs >= MIN_UTTERANCE_MS) ||
-      totalMs >= MAX_UTTERANCE_MS;
+      (silentSamples >= silenceDurationSamples && speechSamples >= minUtteranceSamples) ||
+      frameSamples >= maxUtteranceSamples;
 
     if (shouldFlush) {
       flushUtterance();

@@ -23,3 +23,6 @@
 ## 2026-06-23 - [Skipping Idle Svelte RAF Loop Re-renders]
 **Learning:** In Svelte components running a continuous `requestAnimationFrame` loop, updating state variables (e.g., `level *= 0.85`) forces the reactivity system to evaluate and potentially repaint the DOM on every frame—even when the component is hidden and idle.
 **Action:** When using `requestAnimationFrame` in Svelte, always implement an early return condition (e.g., `if (!active) return;`) to skip state mutations during idle periods, preventing background CPU thrashing.
+## 2024-06-24 - [Avoid Floating Point Math in High-Frequency Audio Callbacks]
+**Learning:** In the Svelte frontend, `Transcriber.svelte` processes raw audio frames emitted from the AudioWorklet at ~333Hz. Previously, every callback invocation included a function call and floating-point division to convert incoming frame sample lengths to milliseconds `(samples / rate) * 1000` to evaluate speech/silence thresholds.
+**Action:** When tracking time bounds in high-frequency loops (like audio sample ingestion), track raw integer counts directly (e.g., `silentSamples`) and pre-calculate your static duration thresholds in samples `(durationMs * rate) / 1000`. This allows using fast integer addition/comparisons and strips millions of function call allocations and division instructions out of hot loops over the app's lifetime.
