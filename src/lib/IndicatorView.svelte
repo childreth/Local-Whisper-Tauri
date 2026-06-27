@@ -35,6 +35,9 @@
   let activeTimeout = null;
   let activationPending = false;
 
+  // Keep an array of references to the DOM nodes
+  let barElements = [];
+
   function tick() {
     raf = requestAnimationFrame(tick);
     // Optimization: skip Svelte reactive assignments when hidden/idle
@@ -42,6 +45,15 @@
     if (!active && level < 0.001) return;
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
+
+    // Direct DOM mutation for hot loop to bypass Svelte's reactivity system
+    // and avoid a full component render/diff on every frame (~60-120fps)
+    for (let i = 0; i < BAR_COUNT; i++) {
+      if (barElements[i]) {
+        const height = Math.max(2, barHeight(i, level, phase) * 100);
+        barElements[i].style.height = `${height}%`;
+      }
+    }
   }
 
   onMount(async () => {
@@ -89,9 +101,10 @@
 <div class="pill" class:transcribing class:active>
   {#each FIXED_COLORS as color, i}
     <div 
+      bind:this={barElements[i]}
       class="bar" 
       style="
-        height: {Math.max(2, barHeight(i, level, phase) * 100)}%; 
+        height: 2%;
         background-color: {color};
         box-shadow: 0 0 8px {color};
       "
