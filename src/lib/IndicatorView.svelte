@@ -159,7 +159,9 @@
     width: 3px;
     min-height: 4px;
     border-radius: 2px;
-    transition: height 70ms ease-out;
+    /* Optimization: Removed transition. Since requestAnimationFrame manually
+       mutates height at ~60fps, CSS transitions just force the browser to
+       interpolate and discard animations on every frame, wasting CPU. */
     opacity: 0.95;
   }
 </style>
