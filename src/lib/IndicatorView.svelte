@@ -48,10 +48,13 @@
 
     // Direct DOM mutation for hot loop to bypass Svelte's reactivity system
     // and avoid a full component render/diff on every frame (~60-120fps)
+    // Optimization: Hardware accelerate high-frequency UI updates by using
+    // transform: scaleY instead of height. This bypasses the main thread's
+    // expensive layout and reflow calculations on every frame.
     for (let i = 0; i < BAR_COUNT; i++) {
       if (barElements[i]) {
-        const height = Math.max(2, barHeight(i, level, phase) * 100);
-        barElements[i].style.height = `${height}%`;
+        const scale = Math.max(0.02, barHeight(i, level, phase));
+        barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
   }
@@ -104,7 +107,6 @@
       bind:this={barElements[i]}
       class="bar" 
       style="
-        height: 2%;
         background-color: {color};
         box-shadow: 0 0 8px {color};
       "
@@ -157,7 +159,9 @@
 
   .bar {
     width: 3px;
-    min-height: 4px;
+    height: 100%;
+    transform: scaleY(0.02);
+    transform-origin: center;
     border-radius: 2px;
     /* Optimization: Removed transition. Since requestAnimationFrame manually
        mutates height at ~60fps, CSS transitions just force the browser to
