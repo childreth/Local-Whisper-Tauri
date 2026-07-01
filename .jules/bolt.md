@@ -33,3 +33,7 @@
 ## 2024-07-28 - [Hardware Acceleration of High-Frequency UI]
 **Learning:** In Svelte components (and web UIs generally), animating geometry properties like `width` or `height` at a high frequency (like an audio meter updating ~25fps or a visualizer at ~60fps) forces the browser's main thread to run expensive layout and reflow calculations on every frame, causing CPU thrashing. Also, if a property is manually updated via `requestAnimationFrame` at 60fps, having a CSS `transition` on that same property forces the browser to needlessly interpolate and immediately discard the animation between every frame.
 **Action:** Always use GPU-accelerated properties (like `transform: scaleX()` or `transform: scaleY()`) instead of `width`/`height` for high-frequency animations. Furthermore, never apply CSS `transition` rules to properties that are already being updated on every frame via a continuous JavaScript loop like `requestAnimationFrame`.
+
+## 2024-07-29 - [Isolating High-Frequency Store Updates]
+**Learning:** Passing high-frequency store values (like a `$micLevel` updating 25 times per second) down to children as props causes the parent component (e.g. `Transcriber.svelte`) to re-evaluate and re-render completely on every frame, wasting CPU.
+**Action:** When a high-frequency store is only needed for a visual leaf component (like an audio meter), isolate the reactivity by having the child component subscribe to the store directly and directly mutate its own DOM node. This prevents parent component diffing and saves main-thread CPU.

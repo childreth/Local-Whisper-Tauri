@@ -1,16 +1,35 @@
 <script>
-  export let level = 0; // 0..1 RMS
+  import { onMount, onDestroy } from 'svelte';
+  import { micLevel } from './stores.js';
+
   export let active = false;
 
-  // RMS for typical speech sits around 0.05-0.20, so amplify visually.
-  $: scale = Math.min(1, level * 3).toFixed(3);
+  let barElement;
+  let unsubscribe;
+
+  onMount(() => {
+    unsubscribe = micLevel.subscribe((level) => {
+      // Optimization: Bypass Svelte's reactivity by grabbing the DOM node
+      // and directly mutating its style. This prevents continuous component
+      // diffing in parent components when micLevel updates 25x/sec.
+      if (barElement) {
+        // RMS for typical speech sits around 0.05-0.20, so amplify visually.
+        const scale = Math.min(1, level * 3).toFixed(3);
+        barElement.style.transform = `scaleX(${scale})`;
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if (unsubscribe) unsubscribe();
+  });
 </script>
 
 <div class="meter" class:active>
   <!-- Optimization: Hardware accelerate high-frequency UI updates by using
        transform: scaleX instead of width. This bypasses the main thread's
        expensive layout and reflow calculations for every incoming audio frame. -->
-  <div class="bar" style="transform: scaleX({scale})"></div>
+  <div bind:this={barElement} class="bar"></div>
 </div>
 
 <style>
