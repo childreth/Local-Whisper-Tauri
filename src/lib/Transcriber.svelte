@@ -368,7 +368,7 @@
       recording={$appState === 'recording'}
       on:click={toggleRecording}
     />
-    <LevelMeter level={$micLevel} active={$appState === 'recording'} />
+    <LevelMeter active={$appState === 'recording'} />
   </div>
 
   <p class="hint">
