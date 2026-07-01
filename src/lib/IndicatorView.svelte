@@ -50,8 +50,11 @@
     // and avoid a full component render/diff on every frame (~60-120fps)
     for (let i = 0; i < BAR_COUNT; i++) {
       if (barElements[i]) {
-        const height = Math.max(2, barHeight(i, level, phase) * 100);
-        barElements[i].style.height = `${height}%`;
+        // Optimization: Use GPU-accelerated transform (scaleY) instead of height
+        // to prevent main thread layout/reflow thrashing on every frame.
+        // Base height is 100% (40px). Minimum scale of 0.1 gives 4px minimum height.
+        const scale = Math.max(0.1, barHeight(i, level, phase));
+        barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
   }
@@ -104,7 +107,7 @@
       bind:this={barElements[i]}
       class="bar" 
       style="
-        height: 2%;
+          transform: scaleY(0.1);
         background-color: {color};
         box-shadow: 0 0 8px {color};
       "
@@ -157,11 +160,13 @@
 
   .bar {
     width: 3px;
-    min-height: 4px;
+    height: 100%;
     border-radius: 2px;
     /* Optimization: Removed transition. Since requestAnimationFrame manually
        mutates height at ~60fps, CSS transitions just force the browser to
        interpolate and discard animations on every frame, wasting CPU. */
     opacity: 0.95;
+    transform-origin: center;
+    will-change: transform;
   }
 </style>
