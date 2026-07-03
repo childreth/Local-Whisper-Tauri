@@ -39,10 +39,15 @@
   let barElements = [];
 
   function tick() {
-    raf = requestAnimationFrame(tick);
     // Optimization: skip Svelte reactive assignments when hidden/idle
-    // to prevent background CPU thrashing and continuous DOM recalculations
-    if (!active && level < 0.001) return;
+    // to prevent background CPU thrashing and continuous DOM recalculations.
+    // By conditionally scheduling the next frame, we terminate the loop entirely
+    // when idle to let the CPU thread sleep (0% background usage).
+    if (!active && level < 0.001) {
+      raf = null;
+      return;
+    }
+
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
 
@@ -57,6 +62,8 @@
         barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
+
+    raf = requestAnimationFrame(tick);
   }
 
   onMount(async () => {
@@ -66,6 +73,10 @@
       const v = Math.min(1, Math.max(0, (e.payload?.level ?? 0) * 5.0));
       if (v > level) level = v;
       transcribing = !!e.payload?.transcribing;
+
+      if (!raf) {
+        raf = requestAnimationFrame(tick);
+      }
 
       if (!active && !activationPending) {
         activationPending = true;
