@@ -20,7 +20,8 @@ export function downsample(input, inputRate, outputRate) {
     const idx = i * ratio;
     const lo = idx | 0;
     const frac = idx - lo;
-    output[i] = input[lo] + (input[lo + 1] - input[lo]) * frac;
+    const val = input[lo];
+    output[i] = val + (input[lo + 1] - val) * frac;
   }
 
   // Handle the final sample safely
@@ -30,7 +31,8 @@ export function downsample(input, inputRate, outputRate) {
     const lo = idx | 0;
     const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
     const frac = idx - lo;
-    output[i] = input[lo] + (input[hi] - input[lo]) * frac;
+    const val = input[lo];
+    output[i] = val + (input[hi] - val) * frac;
   }
 
   return output;
