@@ -41,6 +41,7 @@
   let frameSamples = 0;
   let silentSamples = 0;
   let speechSamples = 0;
+  let utteranceSquareSum = 0;
 
   let nextSegmentId = 1;
   // True when the current recording session was started via the global hotkey;
@@ -117,8 +118,11 @@
       // timer starts in the right state.
       silentSamples = 0;
       speechSamples = 0;
+      utteranceSquareSum = 0;
       for (const f of frames) {
-        if (rms(f) < silenceThreshold) {
+        const frameRms = rms(f);
+        utteranceSquareSum += frameRms * frameRms * f.length;
+        if (frameRms < silenceThreshold) {
           silentSamples += f.length;
         } else {
           silentSamples = 0;
@@ -187,6 +191,7 @@
     frameSamples = 0;
     silentSamples = 0;
     speechSamples = 0;
+    utteranceSquareSum = 0;
   }
 
   let lastLevelEmit = 0;
@@ -234,6 +239,7 @@
 
     frames.push(frame);
     frameSamples += frame.length;
+    utteranceSquareSum += level * level * frame.length;
 
     // Optimization: Track raw sample lengths instead of converting
     // to milliseconds on every single AudioWorklet callback. This removes
@@ -257,6 +263,14 @@
   let transcriptionQueue = Promise.resolve();
 
   function flushUtterance() {
+    // Check overall energy *before* allocating the Float32Array.
+    // This avoids a ~2.8MB allocation and an O(N) rms() evaluation on rejected utterances.
+    const overallRms = Math.sqrt(utteranceSquareSum / frameSamples);
+    if (overallRms < silenceThreshold * 0.5) {
+      resetUtterance();
+      return;
+    }
+
     // Concatenate frames into a single Float32Array.
     const combined = new Float32Array(frameSamples);
     let offset = 0;
@@ -265,9 +279,6 @@
       offset += f.length;
     }
     resetUtterance();
-
-    // Drop if overall energy is too low (false-positive trigger).
-    if (rms(combined) < silenceThreshold * 0.5) return;
 
     const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
     const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
