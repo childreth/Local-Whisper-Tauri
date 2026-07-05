@@ -3,7 +3,7 @@
   import { appState, transcript, micLevel, lastError, preferences } from './stores.js';
   import { transcribe, onHotkey, pasteText, setIndicatorVisible } from './tauri-bridge.js';
   import { emit } from '@tauri-apps/api/event';
-  import { downsample, rms } from './audio-utils.js';
+  import { downsample, sumOfSquares } from './audio-utils.js';
   import RecordButton from './RecordButton.svelte';
   import LevelMeter from './LevelMeter.svelte';
   import TranscriptView from './TranscriptView.svelte';
@@ -54,6 +54,8 @@
   $: silenceDurationSamples = (silenceDurationMs * inputSampleRate) / 1000;
   $: minUtteranceSamples = (MIN_UTTERANCE_MS * inputSampleRate) / 1000;
   $: maxUtteranceSamples = (MAX_UTTERANCE_MS * inputSampleRate) / 1000;
+  // Pre-calculate the squared threshold to avoid taking square root of energy on every frame
+  $: silenceThresholdSq = silenceThreshold * silenceThreshold;
 
   // Open the mic, AudioContext, and worklet once. Idempotent — repeat calls
   // resolve immediately if the pipeline is already up.
@@ -120,9 +122,9 @@
       speechSamples = 0;
       utteranceSquareSum = 0;
       for (const f of frames) {
-        const frameRms = rms(f);
-        utteranceSquareSum += frameRms * frameRms * f.length;
-        if (frameRms < silenceThreshold) {
+        const energy = sumOfSquares(f);
+        utteranceSquareSum += energy;
+        if (energy < silenceThresholdSq * f.length) {
           silentSamples += f.length;
         } else {
           silentSamples = 0;
@@ -223,7 +225,7 @@
     }
 
     wasRecording = true;
-    const level = rms(frame);
+    const energy = sumOfSquares(frame);
     const now = performance.now();
     // Mic meter only meaningful while we're "live".
     // Optimization: Throttle Svelte store updates to ~25fps (every 40ms). The
@@ -231,6 +233,8 @@
     // cause massive main thread layout/paint thrashing for the visual LevelMeter.
     if (now - lastLevelEmit > 40) {
       lastLevelEmit = now;
+      // Reconstitute level from energy just for the UI
+      const level = Math.sqrt(energy / frame.length);
       micLevel.set(level);
       if (pasteOnComplete) {
         emit('indicator:level', { level, transcribing: false }).catch(() => {});
@@ -239,12 +243,12 @@
 
     frames.push(frame);
     frameSamples += frame.length;
-    utteranceSquareSum += level * level * frame.length;
+    utteranceSquareSum += energy;
 
     // Optimization: Track raw sample lengths instead of converting
     // to milliseconds on every single AudioWorklet callback. This removes
     // function call overhead and floating point divisions in the hot loop.
-    if (level < silenceThreshold) {
+    if (energy < silenceThresholdSq * frame.length) {
       silentSamples += frame.length;
     } else {
       silentSamples = 0;
