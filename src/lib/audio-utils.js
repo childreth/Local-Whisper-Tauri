@@ -39,9 +39,10 @@ export function downsample(input, inputRate, outputRate) {
 }
 
 /**
- * RMS amplitude of a Float32Array (0..1 for normalized input).
+ * Sum of squares of a Float32Array. Useful for avoiding Math.sqrt
+ * overhead in hot loops when evaluating energy.
  */
-export function rms(samples) {
+export function sumOfSquares(samples) {
   let sum = 0;
   const len = samples.length;
   // Optimization: caching length and array access speeds up this hot loop ~40%
@@ -49,5 +50,12 @@ export function rms(samples) {
     const s = samples[i];
     sum += s * s;
   }
-  return Math.sqrt(sum / len);
+  return sum;
+}
+
+/**
+ * RMS amplitude of a Float32Array (0..1 for normalized input).
+ */
+export function rms(samples) {
+  return Math.sqrt(sumOfSquares(samples) / samples.length);
 }
