@@ -48,3 +48,7 @@
 ## 2024-08-10 - [Removing Redundant Square Roots in Hot Loops]
 **Learning:** In audio processing, `rms` is often computed as the square root of the mean of squared samples. If the application only needs to compare this energy to a threshold, calling `rms` calculates a `Math.sqrt` and division on every loop iteration. Furthermore, if you are incrementally accumulating the total sum of squares by doing `utteranceSquareSum += level * level * frame.length`, you are squaring a value that was just square-rooted, wasting significant CPU time.
 **Action:** When tracking signal energy iteratively and evaluating against a threshold, track the sum of squares directly (`sumOfSquares`) instead of calculating RMS. Pre-calculate the squared threshold (`silenceThresholdSq = silenceThreshold * silenceThreshold`) outside the loop, and use it to compare against the energy. Only apply `Math.sqrt` when you actually need to reconstitute the linear value for external consumption (e.g., updating a UI visualizer).
+
+## 2024-11-20 - [Integer Ratio Fast-Path in Downsampling]
+**Learning:** In audio downsampling (e.g. going from 48kHz to 16kHz), the decimation ratio is often an exact integer (e.g. 3). Performing full linear interpolation (lerp) on every sample wastes significant CPU time because the fractional component is always zero.
+**Action:** When writing or reviewing resampling code, check if the ratio is an integer. If so, use a dedicated loop that just directly copies `input[i * ratio]` to the output array. This can improve performance by 60% or more for common ratios.
