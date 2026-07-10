@@ -56,6 +56,8 @@
   $: maxUtteranceSamples = (MAX_UTTERANCE_MS * inputSampleRate) / 1000;
   // Pre-calculate the squared threshold to avoid taking square root of energy on every frame
   $: silenceThresholdSq = silenceThreshold * silenceThreshold;
+  // Pre-calculate 0.5x threshold squared for fast flush evaluation (0.5 * 0.5 = 0.25)
+  $: flushThresholdSq = silenceThresholdSq * 0.25;
 
   // Open the mic, AudioContext, and worklet once. Idempotent — repeat calls
   // resolve immediately if the pipeline is already up.
@@ -269,8 +271,8 @@
   function flushUtterance() {
     // Check overall energy *before* allocating the Float32Array.
     // This avoids a ~2.8MB allocation and an O(N) rms() evaluation on rejected utterances.
-    const overallRms = Math.sqrt(utteranceSquareSum / frameSamples);
-    if (overallRms < silenceThreshold * 0.5) {
+    // Optimization: avoid Math.sqrt and division by comparing sum directly to pre-calc squared threshold
+    if (utteranceSquareSum < flushThresholdSq * frameSamples) {
       resetUtterance();
       return;
     }
