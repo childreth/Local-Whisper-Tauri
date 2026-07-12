@@ -57,3 +57,6 @@
 ## 2024-11-21 - [Avoiding `Math.sqrt` and Division in Hot RMS Evaluators]
 **Learning:** Computing RMS via `Math.sqrt(sum / count) < threshold` is computationally heavier and functionally identical to evaluating `sum < (threshold^2) * count`. By pre-calculating the squared threshold and moving the frame count multiplier, you eliminate both a square root call and a floating point division on the hot path.
 **Action:** When evaluating threshold comparisons for audio streams in JavaScript, always pre-calculate a squared threshold and use integer multiplication to completely eliminate `Math.sqrt` and `/` operations from the evaluation.
+## 2024-11-21 - [Batching AudioWorklet IPC Frames]
+**Learning:** AudioWorklets typically process audio in small 128-sample blocks. Emitting a message to the main thread on every single block (e.g., via `postMessage`) causes extremely high-frequency IPC wakeups (~375Hz at 48kHz). This floods the main thread, resulting in severe CPU thrashing and excessive `Float32Array` garbage collection allocations.
+**Action:** When capturing audio from an `AudioWorklet`, always batch the incoming 128-sample blocks into a larger buffer (e.g., 2048 or 4096 samples) before emitting to the main thread. This drops IPC overhead to a manageable ~23Hz while keeping latency well below typical VAD or UI perception thresholds.
