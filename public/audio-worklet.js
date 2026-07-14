@@ -20,11 +20,20 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     if (!channel || channel.length === 0) return true;
 
     let inOffset = 0;
-    while (inOffset < channel.length) {
+    const channelLength = channel.length;
+    while (inOffset < channelLength) {
       const remaining = this.batchSize - this.offset;
-      const copyCount = Math.min(channel.length - inOffset, remaining);
+      const available = channelLength - inOffset;
 
-      this.buffer.set(channel.subarray(inOffset, inOffset + copyCount), this.offset);
+      // Optimization: Replace Math.min with inline conditional to avoid function call overhead
+      const copyCount = available < remaining ? available : remaining;
+
+      // Optimization: Replace channel.subarray().set() with a manual loop to prevent
+      // temporary TypedArray allocations and garbage collection pauses in the hot loop.
+      for (let i = 0; i < copyCount; i++) {
+        this.buffer[this.offset + i] = channel[inOffset + i];
+      }
+
       this.offset += copyCount;
       inOffset += copyCount;
 
