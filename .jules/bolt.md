@@ -60,3 +60,7 @@
 ## 2024-11-21 - [Batching AudioWorklet IPC Frames]
 **Learning:** AudioWorklets typically process audio in small 128-sample blocks. Emitting a message to the main thread on every single block (e.g., via `postMessage`) causes extremely high-frequency IPC wakeups (~375Hz at 48kHz). This floods the main thread, resulting in severe CPU thrashing and excessive `Float32Array` garbage collection allocations.
 **Action:** When capturing audio from an `AudioWorklet`, always batch the incoming 128-sample blocks into a larger buffer (e.g., 2048 or 4096 samples) before emitting to the main thread. This drops IPC overhead to a manageable ~23Hz while keeping latency well below typical VAD or UI perception thresholds.
+
+## 2026-07-14 - [Zero-Allocation AudioWorklet Buffering]
+**Learning:** In highly sensitive real-time threads like AudioWorklets, creating temporary TypedArray views (e.g., `channel.subarray(start, end)`) and invoking function calls like `Math.min` causes hidden memory allocations and GC pressure, which can lead to audible dropouts.
+**Action:** For array manipulations in the AudioWorklet hot path, use raw `for` loops for copying values element-by-element and replace `Math.min` with inline ternary conditionals to guarantee zero-allocation processing.
