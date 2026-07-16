@@ -38,10 +38,13 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       inOffset += copyCount;
 
       if (this.offset >= this.batchSize) {
-        // Transfer a copy to the main thread for zero-copy delivery.
-        // We must copy because this.buffer is reused across iterations.
-        const copy = new Float32Array(this.buffer);
-        this.port.postMessage(copy, [copy.buffer]);
+        // Optimization: Transfer the buffer ownership directly to the main thread
+        // for true zero-copy delivery, bypassing the O(N) element-wise copy cost of
+        // `new Float32Array(this.buffer)` on the real-time audio thread.
+        // We then allocate a new buffer to receive the next batch.
+        const transferBuffer = this.buffer;
+        this.port.postMessage(transferBuffer, [transferBuffer.buffer]);
+        this.buffer = new Float32Array(this.batchSize);
         this.offset = 0;
       }
     }
