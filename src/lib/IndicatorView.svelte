@@ -58,7 +58,8 @@
         // Optimization: Use GPU-accelerated transform (scaleY) instead of height
         // to prevent main thread layout/reflow thrashing on every frame.
         // Base height is 100% (40px). Minimum scale of 0.1 gives 4px minimum height.
-        const scale = Math.max(0.1, barHeight(i, level, phase));
+        const bh = barHeight(i, level, phase);
+        const scale = bh > 0.1 ? bh : 0.1;
         barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
@@ -70,7 +71,8 @@
     raf = requestAnimationFrame(tick);
     unlisten = await listen('indicator:level', (e) => {
       // amplify input slightly for more dramatic effect
-      const v = Math.min(1, Math.max(0, (e.payload?.level ?? 0) * 5.0));
+      const rawLevel = (e.payload?.level ?? 0) * 5.0;
+      const v = rawLevel < 0 ? 0 : (rawLevel > 1 ? 1 : rawLevel);
       if (v > level) level = v;
       transcribing = !!e.payload?.transcribing;
 
@@ -107,8 +109,10 @@
     const wobble = (Math.sin(currentPhase + i * 0.9) + 1) / 2;
     const base = currentLevel * BAR_BIAS[i];
     const idle = 0.08 + wobble * 0.08;
-    const v = Math.max(idle, base + wobble * 0.15 * currentLevel);
-    return Math.min(1, Math.max(0.08, v));
+    const val = base + wobble * 0.15 * currentLevel;
+    const v = val > idle ? val : idle;
+    const minClamped = v > 0.08 ? v : 0.08;
+    return minClamped < 1 ? minClamped : 1;
   }
 </script>
 
