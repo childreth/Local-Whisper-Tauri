@@ -71,3 +71,7 @@
 ## 2024-11-21 - [Zero-Copy Transfer in AudioWorklet]
 **Learning:** In an `AudioWorklet`, using `new Float32Array(existingBuffer)` to create a copy before `postMessage` actually incurs an O(N) element-wise copy cost on the critical real-time thread. The comment "Transfer a copy ... for zero-copy delivery" was contradictory.
 **Action:** For true zero-copy delivery via `postMessage(buf, [buf.buffer])`, transfer ownership of the existing buffer directly and immediately re-allocate a new buffer for the next batch (e.g., `this.buffer = new Float32Array(batchSize)`). Allocating a new empty buffer is significantly faster than copying all elements from an existing one.
+
+## 2026-07-19 - [Avoiding Explicit String Allocation in UI Hot Loops]
+**Learning:** In high-frequency UI updates like audio visualizers that mutate DOM styles on every frame or tick, explicitly calling string conversion methods like `.toFixed(3)` forces continuous allocation of temporary String objects, increasing GC pressure. Using native string coercion within template literals (e.g., `scaleX(${scale})`) achieves the same result with significantly lower allocation overhead.
+**Action:** Avoid explicit `.toString()` or `.toFixed()` in hot loops; rely on JS engine's built-in string coercion when interpolating into CSS or DOM properties.
