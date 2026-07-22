@@ -14,7 +14,10 @@
     const unsubscribe = micLevel.subscribe((level) => {
       if (barElement) {
         // RMS for typical speech sits around 0.05-0.20, so amplify visually.
-        const scale = Math.min(1, level * 3).toFixed(3);
+        // Optimization: Rely on native string coercion within the template literal
+        // instead of calling explicit string conversion methods like .toFixed() to
+        // reduce continuous object allocation and GC pressure in this high-frequency loop.
+        const scale = Math.min(1, level * 3);
         barElement.style.transform = `scaleX(${scale})`;
       }
     });
