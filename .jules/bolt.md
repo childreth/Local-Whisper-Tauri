@@ -75,3 +75,6 @@
 ## 2026-07-22 - [Avoiding Explicit String Conversion in Hot UI Loops]
 **Learning:** In high-frequency UI loops (e.g., `requestAnimationFrame` or Svelte store subscriptions), avoiding explicit string conversion methods like `.toFixed()` or `.toString()` prevents continuous string object allocation and garbage collection.
 **Action:** Rely on native string coercion within template literals (e.g., \`scaleX(${scale})\`) instead of calling explicit string conversion methods to reduce GC pressure.
+## 2024-11-21 - [Avoiding Math.min/max in High-Frequency UI Loops]
+**Learning:** In high-frequency UI loops (like `requestAnimationFrame` for audio visualizers updating at 60fps), calling `Math.min` or `Math.max` introduces unnecessary function call overhead on every single frame iteration. Over an array of elements (e.g. iterating over 15 bars), this cost multiplies and contributes to main-thread thrashing.
+**Action:** Replace `Math.min` and `Math.max` with inline ternary conditionals (`const v = x > y ? x : y`) to avoid function call overhead completely in continuous animation loops.
