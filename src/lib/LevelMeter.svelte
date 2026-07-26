@@ -17,7 +17,8 @@
         // Optimization: Rely on native string coercion within the template literal
         // instead of calling explicit string conversion methods like .toFixed() to
         // reduce continuous object allocation and GC pressure in this high-frequency loop.
-        const scale = Math.min(1, level * 3);
+        const l3 = level * 3;
+        const scale = l3 < 1 ? l3 : 1;
         barElement.style.transform = `scaleX(${scale})`;
       }
     });

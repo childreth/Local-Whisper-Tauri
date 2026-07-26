@@ -24,6 +24,8 @@
   const BAR_COUNT = FIXED_COLORS.length;
   // Chaotic but natural looking distribution for biases, not just a bell curve
   const BAR_BIAS = Array.from({length: BAR_COUNT}, () => 0.5 + Math.random() * 0.5);
+  // Optimization: Pre-calculate invariant phase offsets to avoid redundant calculations per frame
+  const PHASE_OFFSETS = Array.from({length: BAR_COUNT}, (_, i) => i * 0.9);
 
   let level = 0; // smoothed 0..1
   let transcribing = false;
@@ -58,7 +60,8 @@
         // Optimization: Use GPU-accelerated transform (scaleY) instead of height
         // to prevent main thread layout/reflow thrashing on every frame.
         // Base height is 100% (40px). Minimum scale of 0.1 gives 4px minimum height.
-        const scale = Math.max(0.1, barHeight(i, level, phase));
+        const bh = barHeight(i, level, phase);
+        const scale = bh > 0.1 ? bh : 0.1;
         barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
@@ -70,7 +73,9 @@
     raf = requestAnimationFrame(tick);
     unlisten = await listen('indicator:level', (e) => {
       // amplify input slightly for more dramatic effect
-      const v = Math.min(1, Math.max(0, (e.payload?.level ?? 0) * 5.0));
+      const raw = (e.payload?.level ?? 0) * 5.0;
+      const v0 = raw > 0 ? raw : 0;
+      const v = v0 < 1 ? v0 : 1;
       if (v > level) level = v;
       transcribing = !!e.payload?.transcribing;
 
@@ -104,11 +109,13 @@
   });
 
   function barHeight(i, currentLevel, currentPhase) {
-    const wobble = (Math.sin(currentPhase + i * 0.9) + 1) / 2;
+    const wobble = (Math.sin(currentPhase + PHASE_OFFSETS[i]) + 1) / 2;
     const base = currentLevel * BAR_BIAS[i];
     const idle = 0.08 + wobble * 0.08;
-    const v = Math.max(idle, base + wobble * 0.15 * currentLevel);
-    return Math.min(1, Math.max(0.08, v));
+    const val = base + wobble * 0.15 * currentLevel;
+    const v = val > idle ? val : idle;
+    const v2 = v > 0.08 ? v : 0.08;
+    return v2 < 1 ? v2 : 1;
   }
 </script>
 

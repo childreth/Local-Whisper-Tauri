@@ -75,3 +75,7 @@
 ## 2026-07-22 - [Avoiding Explicit String Conversion in Hot UI Loops]
 **Learning:** In high-frequency UI loops (e.g., `requestAnimationFrame` or Svelte store subscriptions), avoiding explicit string conversion methods like `.toFixed()` or `.toString()` prevents continuous string object allocation and garbage collection.
 **Action:** Rely on native string coercion within template literals (e.g., \`scaleX(${scale})\`) instead of calling explicit string conversion methods to reduce GC pressure.
+
+## 2024-11-21 - [Replacing Math Functions with Inline Ternaries in RAF Loops]
+**Learning:** In high-frequency UI hot loops like `requestAnimationFrame` or high-frequency Svelte store subscriptions, repeatedly calling built-in functions like `Math.min` and `Math.max` incurs measurable function call overhead that can contribute to main thread CPU usage.
+**Action:** Replace `Math.min` and `Math.max` with inline ternary conditionals (e.g., `x > y ? x : y`) and pre-calculate invariant arithmetic operations (e.g., constant array offsets) outside the loop to maximize main thread performance during animations.
