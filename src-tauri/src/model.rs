@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
-use sha2::{Digest, Sha256};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
@@ -89,7 +88,6 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
     let total = resp.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
     let mut last_emit = Instant::now() - PROGRESS_INTERVAL;
-    let mut hasher = Sha256::new();
 
     let mut file = tokio::fs::File::create(&tmp_path).await?;
     let mut stream = resp.bytes_stream();
@@ -97,7 +95,6 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| TranscribeError::Download(e.to_string()))?;
         file.write_all(&chunk).await?;
-        hasher.update(&chunk);
         downloaded += chunk.len() as u64;
 
         if last_emit.elapsed() >= PROGRESS_INTERVAL {
@@ -126,15 +123,4 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
 
     tokio::fs::rename(&tmp_path, &path).await?;
     Ok(path)
-}
-
-#[allow(dead_code)]
-fn hex_lower(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push(HEX[(b >> 4) as usize] as char);
-        s.push(HEX[(b & 0x0f) as usize] as char);
-    }
-    s
 }
