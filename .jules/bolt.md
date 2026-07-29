@@ -78,3 +78,6 @@
 ## 2024-11-21 - [Avoiding Math.min/max in High-Frequency UI Loops]
 **Learning:** In high-frequency UI loops (like `requestAnimationFrame` for audio visualizers updating at 60fps), calling `Math.min` or `Math.max` introduces unnecessary function call overhead on every single frame iteration. Over an array of elements (e.g. iterating over 15 bars), this cost multiplies and contributes to main-thread thrashing.
 **Action:** Replace `Math.min` and `Math.max` with inline ternary conditionals (`const v = x > y ? x : y`) to avoid function call overhead completely in continuous animation loops.
+## 2024-11-21 - [Removing Unused Cryptographic Hashing in IO Streams]
+**Learning:** Computing a SHA256 hash synchronously inside an async chunk download stream (`hasher.update(&chunk)`) blocks the async worker thread. If the hash is ultimately unused (never finalized or verified), this significantly reduces download throughput and causes unnecessary CPU spikes.
+**Action:** Always verify that expensive operations like cryptographic hashing are actually utilized before leaving them in the hot path of an IO stream.
