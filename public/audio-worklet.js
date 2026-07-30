@@ -30,8 +30,12 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 
       // Optimization: Replace channel.subarray().set() with a manual loop to prevent
       // temporary TypedArray allocations and garbage collection pauses in the hot loop.
+      // Additionally, cache the buffer and offset properties in local variables to
+      // prevent redundant object property lookups on every loop iteration.
+      const buf = this.buffer;
+      const off = this.offset;
       for (let i = 0; i < copyCount; i++) {
-        this.buffer[this.offset + i] = channel[inOffset + i];
+        buf[off + i] = channel[inOffset + i];
       }
 
       this.offset += copyCount;
