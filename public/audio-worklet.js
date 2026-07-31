@@ -28,10 +28,15 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       // Optimization: Replace Math.min with inline conditional to avoid function call overhead
       const copyCount = available < remaining ? available : remaining;
 
+      // Optimization: Cache class properties (this.buffer, this.offset) in local variables
+      // to prevent redundant property lookup overhead in the real-time critical hot loop.
+      const buf = this.buffer;
+      const currentOffset = this.offset;
+
       // Optimization: Replace channel.subarray().set() with a manual loop to prevent
       // temporary TypedArray allocations and garbage collection pauses in the hot loop.
       for (let i = 0; i < copyCount; i++) {
-        this.buffer[this.offset + i] = channel[inOffset + i];
+        buf[currentOffset + i] = channel[inOffset + i];
       }
 
       this.offset += copyCount;
