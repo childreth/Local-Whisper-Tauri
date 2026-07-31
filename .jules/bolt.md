@@ -81,3 +81,6 @@
 ## 2024-11-21 - [Removing Unused Cryptographic Hashing in IO Streams]
 **Learning:** Computing a SHA256 hash synchronously inside an async chunk download stream (`hasher.update(&chunk)`) blocks the async worker thread. If the hash is ultimately unused (never finalized or verified), this significantly reduces download throughput and causes unnecessary CPU spikes.
 **Action:** Always verify that expensive operations like cryptographic hashing are actually utilized before leaving them in the hot path of an IO stream.
+## 2024-11-21 - [Caching Class Properties in AudioWorklet Hot Loops]
+**Learning:** In tight JavaScript numerical loops (e.g., AudioWorklet process methods), redundant class object property lookups (`this.buffer`, `this.offset`) add overhead inside the loop. In performance-critical real-time threads, bypassing this by caching the properties to local variables provides an easy speed and GC optimization.
+**Action:** When manually iterating and manipulating array items in an AudioWorklet or similar performance-sensitive context, always cache outer context properties (`this.*`) into locally scoped variables before the loop begins.
