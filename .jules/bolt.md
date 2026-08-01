@@ -81,3 +81,6 @@
 ## 2024-11-21 - [Removing Unused Cryptographic Hashing in IO Streams]
 **Learning:** Computing a SHA256 hash synchronously inside an async chunk download stream (`hasher.update(&chunk)`) blocks the async worker thread. If the hash is ultimately unused (never finalized or verified), this significantly reduces download throughput and causes unnecessary CPU spikes.
 **Action:** Always verify that expensive operations like cryptographic hashing are actually utilized before leaving them in the hot path of an IO stream.
+## 2024-11-21 - [Caching Class Properties in Hot Loops]
+**Learning:** In tight JavaScript numerical loops (e.g., AudioWorklet process methods), referencing class object properties (like `this.buffer`, `this.offset`, or `this.batchSize`) within the loop causes redundant property lookup overhead on every iteration. While small, this overhead compounds in hot paths and increases execution time and GC pressure.
+**Action:** Always cache frequently accessed class object properties into local variables before entering a high-frequency loop, and restore any modified values back to the class instance after the loop completes.
