@@ -21,8 +21,15 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 
     let inOffset = 0;
     const channelLength = channel.length;
+
+    // Optimization: Cache class object properties into local variables before the hot loop.
+    // This prevents redundant property lookup overhead on the `this` object and reduces GC pressure.
+    let buffer = this.buffer;
+    let offset = this.offset;
+    const batchSize = this.batchSize;
+
     while (inOffset < channelLength) {
-      const remaining = this.batchSize - this.offset;
+      const remaining = batchSize - offset;
       const available = channelLength - inOffset;
 
       // Optimization: Replace Math.min with inline conditional to avoid function call overhead
@@ -31,23 +38,26 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       // Optimization: Replace channel.subarray().set() with a manual loop to prevent
       // temporary TypedArray allocations and garbage collection pauses in the hot loop.
       for (let i = 0; i < copyCount; i++) {
-        this.buffer[this.offset + i] = channel[inOffset + i];
+        buffer[offset + i] = channel[inOffset + i];
       }
 
-      this.offset += copyCount;
+      offset += copyCount;
       inOffset += copyCount;
 
-      if (this.offset >= this.batchSize) {
+      if (offset >= batchSize) {
         // Optimization: Transfer the buffer ownership directly to the main thread
         // for true zero-copy delivery, bypassing the O(N) element-wise copy cost of
         // `new Float32Array(this.buffer)` on the real-time audio thread.
         // We then allocate a new buffer to receive the next batch.
-        const transferBuffer = this.buffer;
+        const transferBuffer = buffer;
         this.port.postMessage(transferBuffer, [transferBuffer.buffer]);
-        this.buffer = new Float32Array(this.batchSize);
-        this.offset = 0;
+        buffer = new Float32Array(batchSize);
+        offset = 0;
       }
     }
+
+    this.buffer = buffer;
+    this.offset = offset;
 
     return true;
   }
