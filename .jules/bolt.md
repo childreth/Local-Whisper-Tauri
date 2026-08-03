@@ -81,3 +81,6 @@
 ## 2024-11-21 - [Removing Unused Cryptographic Hashing in IO Streams]
 **Learning:** Computing a SHA256 hash synchronously inside an async chunk download stream (`hasher.update(&chunk)`) blocks the async worker thread. If the hash is ultimately unused (never finalized or verified), this significantly reduces download throughput and causes unnecessary CPU spikes.
 **Action:** Always verify that expensive operations like cryptographic hashing are actually utilized before leaving them in the hot path of an IO stream.
+## 2024-12-05 - [Caching Class Object Properties in High-Frequency DSP Loops]
+**Learning:** In real-time threads processing audio at a very high rate, accessing class object properties on `this` inside a `while` or `for` loop forces the JavaScript engine to perform continuous property lookups. While V8 might eventually optimize this, doing it explicitly provides a guaranteed reduction in overhead and limits potential garbage collection pressure during critical sections.
+**Action:** When working with DSP logic like an `AudioWorkletProcessor`'s `process` method, always pull `this.*` properties into local scope variables (e.g., `let buffer = this.buffer;`) before entering the hot loop, and sync them back to the instance at the end of the method.
