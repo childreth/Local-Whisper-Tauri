@@ -5,6 +5,112 @@
  * Good enough for speech (whisper is tolerant). Swap for a polyphase
  * filter if you start hearing aliasing artifacts in transcriptions.
  */
+/**
+ * Downsample directly from an array of Float32Array chunks to avoid
+ * allocating a massive intermediate concatenated array.
+ */
+export function downsampleChunks(chunks, inLen, inputRate, outputRate) {
+  if (inputRate === outputRate) {
+    const output = new Float32Array(inLen);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      output.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return output;
+  }
+
+  const ratio = inputRate / outputRate;
+  const outLength = (inLen / ratio) | 0;
+  const output = new Float32Array(outLength);
+
+  let chunkIdx = 0;
+  let chunkOffset = 0;
+  let currentChunk = chunks[0];
+
+  // Optimization: If the ratio is an exact integer, we can bypass
+  // fractional interpolation math completely.
+  if (Number.isInteger(ratio)) {
+    for (let i = 0; i < outLength; i++) {
+      const globalIdx = i * ratio;
+      while (currentChunk && chunkOffset + currentChunk.length <= globalIdx) {
+        chunkOffset += currentChunk.length;
+        chunkIdx++;
+        currentChunk = chunks[chunkIdx];
+      }
+      if (currentChunk) {
+        output[i] = currentChunk[globalIdx - chunkOffset];
+      }
+    }
+    return output;
+  }
+
+  // Optimization: Extract the bounds check from the hot loop.
+  const safeOutLength = outLength - 1;
+  for (let i = 0; i < safeOutLength; i++) {
+    const idx = i * ratio;
+    const lo = idx | 0;
+    const frac = idx - lo;
+
+    while (currentChunk && chunkOffset + currentChunk.length <= lo) {
+      chunkOffset += currentChunk.length;
+      chunkIdx++;
+      currentChunk = chunks[chunkIdx];
+    }
+
+    if (currentChunk) {
+      const localLo = lo - chunkOffset;
+      const val = currentChunk[localLo];
+
+      let nextVal;
+      if (localLo + 1 < currentChunk.length) {
+        nextVal = currentChunk[localLo + 1];
+      } else {
+        const nextChunk = chunks[chunkIdx + 1];
+        nextVal = nextChunk ? nextChunk[0] : val;
+      }
+
+      output[i] = val + (nextVal - val) * frac;
+    }
+  }
+
+  // Handle the final sample safely
+  if (outLength > 0) {
+    const i = outLength - 1;
+    const idx = i * ratio;
+    const lo = idx | 0;
+    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
+    const frac = idx - lo;
+
+    while (currentChunk && chunkOffset + currentChunk.length <= lo) {
+      chunkOffset += currentChunk.length;
+      chunkIdx++;
+      currentChunk = chunks[chunkIdx];
+    }
+
+    if (currentChunk) {
+      const localLo = lo - chunkOffset;
+      const val = currentChunk[localLo];
+
+      let nextVal = val;
+      if (hi > lo) {
+        const localHi = hi - chunkOffset;
+        if (localHi < currentChunk.length) {
+          nextVal = currentChunk[localHi];
+        } else {
+          const nextChunk = chunks[chunkIdx + 1];
+          nextVal = nextChunk ? nextChunk[0] : val;
+        }
+      }
+
+      output[i] = val + (nextVal - val) * frac;
+    }
+  }
+
+  return output;
+}
+
 export function downsample(input, inputRate, outputRate) {
   if (inputRate === outputRate) return input;
   const ratio = inputRate / outputRate;

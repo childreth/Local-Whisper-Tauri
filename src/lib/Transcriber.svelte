@@ -3,7 +3,7 @@
   import { appState, transcript, micLevel, lastError, preferences } from './stores.js';
   import { transcribe, onHotkey, pasteText, setIndicatorVisible } from './tauri-bridge.js';
   import { emit } from '@tauri-apps/api/event';
-  import { downsample, sumOfSquares } from './audio-utils.js';
+  import { downsampleChunks, sumOfSquares } from './audio-utils.js';
   import RecordButton from './RecordButton.svelte';
   import LevelMeter from './LevelMeter.svelte';
   import TranscriptView from './TranscriptView.svelte';
@@ -277,16 +277,12 @@
       return;
     }
 
-    // Concatenate frames into a single Float32Array.
-    const combined = new Float32Array(frameSamples);
-    let offset = 0;
-    for (const f of frames) {
-      combined.set(f, offset);
-      offset += f.length;
-    }
+    // Optimization: Downsample directly from the array of chunks without allocating
+    // a massive concatenated array first. This saves up to ~2.8MB of intermediate
+    // Float32Array allocations for a 15s utterance and reduces GC pressure.
+    const resampled = downsampleChunks(frames, frameSamples, inputSampleRate, TARGET_SAMPLE_RATE);
     resetUtterance();
 
-    const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
     const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
 
     const id = nextSegmentId++;
