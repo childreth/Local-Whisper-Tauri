@@ -277,17 +277,10 @@
       return;
     }
 
-    // Concatenate frames into a single Float32Array.
-    const combined = new Float32Array(frameSamples);
-    let offset = 0;
-    for (const f of frames) {
-      combined.set(f, offset);
-      offset += f.length;
-    }
-    resetUtterance();
-
-    const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
+    // Pass chunks array directly to avoid large intermediate combined array allocation
+    const resampled = downsample(frames, inputSampleRate, TARGET_SAMPLE_RATE, frameSamples);
     const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
+    resetUtterance();
 
     const id = nextSegmentId++;
     transcript.update((segs) => [...segs, { id, text: '…', pending: true }]);
