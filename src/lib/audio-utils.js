@@ -5,19 +5,40 @@
  * Good enough for speech (whisper is tolerant). Swap for a polyphase
  * filter if you start hearing aliasing artifacts in transcriptions.
  */
-export function downsample(input, inputRate, outputRate) {
-  if (inputRate === outputRate) return input;
+export function downsample(input, inputRate, outputRate, totalSamples = 0) {
+  const isSingle = input instanceof Float32Array;
+  if (isSingle && inputRate === outputRate) return input;
+
+  const chunks = isSingle ? [input] : input;
+  if (chunks.length === 0) return new Float32Array(0);
+
+  const inLen = isSingle ? input.length : totalSamples;
+  if (inLen === 0) return new Float32Array(0);
+
   const ratio = inputRate / outputRate;
-  const inLen = input.length;
   const outLength = (inLen / ratio) | 0;
   const output = new Float32Array(outLength);
+
+  const numChunks = chunks.length;
+  let chunkIdx = 0;
+  let chunkStart = 0;
+  let currentChunk = chunks[0];
+  let chunkEnd = currentChunk.length;
 
   // Optimization: If the ratio is an exact integer (e.g. 48kHz -> 16kHz = 3),
   // we can completely skip fractional interpolation math and directly assign.
   // This speeds up execution time by ~5x for standard desktop mic rates.
+  // Now handles downsampling directly from chunks without allocating an intermediate buffer.
   if (Number.isInteger(ratio)) {
     for (let i = 0; i < outLength; i++) {
-      output[i] = input[i * ratio];
+      const idx = i * ratio;
+      while (idx >= chunkEnd && chunkIdx < numChunks - 1) {
+        chunkIdx++;
+        chunkStart = chunkEnd;
+        currentChunk = chunks[chunkIdx];
+        chunkEnd += currentChunk.length;
+      }
+      output[i] = currentChunk[idx - chunkStart];
     }
     return output;
   }
@@ -29,9 +50,28 @@ export function downsample(input, inputRate, outputRate) {
   for (let i = 0; i < safeOutLength; i++) {
     const idx = i * ratio;
     const lo = idx | 0;
+
+    while (lo >= chunkEnd && chunkIdx < numChunks - 1) {
+      chunkIdx++;
+      chunkStart = chunkEnd;
+      currentChunk = chunks[chunkIdx];
+      chunkEnd += currentChunk.length;
+    }
+
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[lo + 1] - val) * frac;
+    const localLo = lo - chunkStart;
+    const val = currentChunk[localLo];
+
+    let nextVal;
+    if (localLo + 1 < currentChunk.length) {
+      nextVal = currentChunk[localLo + 1];
+    } else if (chunkIdx + 1 < numChunks) {
+      nextVal = chunks[chunkIdx + 1][0];
+    } else {
+      nextVal = val;
+    }
+
+    output[i] = val + (nextVal - val) * frac;
   }
 
   // Handle the final sample safely
@@ -39,10 +79,29 @@ export function downsample(input, inputRate, outputRate) {
     const i = outLength - 1;
     const idx = i * ratio;
     const lo = idx | 0;
-    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
+
+    while (lo >= chunkEnd && chunkIdx < numChunks - 1) {
+      chunkIdx++;
+      chunkStart = chunkEnd;
+      currentChunk = chunks[chunkIdx];
+      chunkEnd += currentChunk.length;
+    }
+
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[hi] - val) * frac;
+    const localLo = lo - chunkStart;
+    const val = currentChunk[localLo];
+
+    let hiVal;
+    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
+    if (hi - chunkStart < currentChunk.length) {
+      hiVal = currentChunk[hi - chunkStart];
+    } else if (chunkIdx + 1 < numChunks && lo + 1 === hi) {
+      hiVal = chunks[chunkIdx + 1][0];
+    } else {
+      hiVal = val;
+    }
+
+    output[i] = val + (hiVal - val) * frac;
   }
 
   return output;
