@@ -277,16 +277,11 @@
       return;
     }
 
-    // Concatenate frames into a single Float32Array.
-    const combined = new Float32Array(frameSamples);
-    let offset = 0;
-    for (const f of frames) {
-      combined.set(f, offset);
-      offset += f.length;
-    }
+    // Optimization: Downsample directly from the array of chunks in a single pass.
+    // This avoids concatenating them into a large intermediate Float32Array first,
+    // preventing massive memory allocations and reducing Garbage Collection spikes.
+    const resampled = downsample(frames, inputSampleRate, TARGET_SAMPLE_RATE);
     resetUtterance();
-
-    const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
     const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
 
     const id = nextSegmentId++;
