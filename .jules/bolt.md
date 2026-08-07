@@ -84,3 +84,6 @@
 ## 2024-12-05 - [Caching Class Object Properties in High-Frequency DSP Loops]
 **Learning:** In real-time threads processing audio at a very high rate, accessing class object properties on `this` inside a `while` or `for` loop forces the JavaScript engine to perform continuous property lookups. While V8 might eventually optimize this, doing it explicitly provides a guaranteed reduction in overhead and limits potential garbage collection pressure during critical sections.
 **Action:** When working with DSP logic like an `AudioWorkletProcessor`'s `process` method, always pull `this.*` properties into local scope variables (e.g., `let buffer = this.buffer;`) before entering the hot loop, and sync them back to the instance at the end of the method.
+## 2024-12-05 - [Avoiding Array Concatenation before DSP]
+**Learning:** In JavaScript audio processing, when downsampling an array of multiple `Float32Array` chunks, avoid concatenating them into a large intermediate buffer first. Instead, downsample directly from the array of chunks in a single pass to prevent massive memory allocations and reduce Garbage Collection spikes.
+**Action:** When writing DSP functions that operate on data streams, implement them to accept arrays of chunks rather than assuming a single flat array.
