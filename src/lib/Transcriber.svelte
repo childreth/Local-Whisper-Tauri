@@ -277,17 +277,14 @@
       return;
     }
 
-    // Concatenate frames into a single Float32Array.
-    const combined = new Float32Array(frameSamples);
-    let offset = 0;
-    for (const f of frames) {
-      combined.set(f, offset);
-      offset += f.length;
-    }
-    resetUtterance();
-
-    const resampled = downsample(combined, inputSampleRate, TARGET_SAMPLE_RATE);
+    // Optimization: Skip concatenation into a single large Float32Array.
+    // Instead, pass the array of frames directly to downsample(), which now
+    // supports iterating over chunks, avoiding a massive allocation and copy loop.
+    const chunks = frames;
+    const resampled = downsample(chunks, inputSampleRate, TARGET_SAMPLE_RATE);
     const pcm = new Uint8Array(resampled.buffer, resampled.byteOffset, resampled.byteLength);
+
+    resetUtterance();
 
     const id = nextSegmentId++;
     transcript.update((segs) => [...segs, { id, text: '…', pending: true }]);

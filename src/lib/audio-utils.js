@@ -6,18 +6,44 @@
  * filter if you start hearing aliasing artifacts in transcriptions.
  */
 export function downsample(input, inputRate, outputRate) {
-  if (inputRate === outputRate) return input;
+  // Optimization: Accept either a single Float32Array or an array of chunks.
+  // This avoids massive memory allocations and GC spikes when downsampling
+  // directly from an array of Float32Array chunks by skipping concatenation.
+  const chunks = input instanceof Float32Array ? [input] : input;
+  let inLen = 0;
+  for (let i = 0; i < chunks.length; i++) inLen += chunks[i].length;
+
+  if (inputRate === outputRate) {
+    if (chunks.length === 1) return chunks[0];
+    const out = new Float32Array(inLen);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      out.set(chunks[i], offset);
+      offset += chunks[i].length;
+    }
+    return out;
+  }
+
   const ratio = inputRate / outputRate;
-  const inLen = input.length;
   const outLength = (inLen / ratio) | 0;
   const output = new Float32Array(outLength);
+
+  let cIdx = 0;
+  let cOff = 0;
+  let cur = chunks[0];
 
   // Optimization: If the ratio is an exact integer (e.g. 48kHz -> 16kHz = 3),
   // we can completely skip fractional interpolation math and directly assign.
   // This speeds up execution time by ~5x for standard desktop mic rates.
   if (Number.isInteger(ratio)) {
     for (let i = 0; i < outLength; i++) {
-      output[i] = input[i * ratio];
+      const idx = i * ratio;
+      while (idx >= cOff + cur.length) {
+        cOff += cur.length;
+        cIdx++;
+        cur = chunks[cIdx];
+      }
+      output[i] = cur[idx - cOff];
     }
     return output;
   }
@@ -30,8 +56,22 @@ export function downsample(input, inputRate, outputRate) {
     const idx = i * ratio;
     const lo = idx | 0;
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[lo + 1] - val) * frac;
+
+    while (lo >= cOff + cur.length) {
+      cOff += cur.length;
+      cIdx++;
+      cur = chunks[cIdx];
+    }
+    const val = cur[lo - cOff];
+
+    let valNext;
+    if (lo + 1 < cOff + cur.length) {
+      valNext = cur[lo + 1 - cOff];
+    } else {
+      valNext = chunks[cIdx + 1][0];
+    }
+
+    output[i] = val + (valNext - val) * frac;
   }
 
   // Handle the final sample safely
@@ -39,10 +79,26 @@ export function downsample(input, inputRate, outputRate) {
     const i = outLength - 1;
     const idx = i * ratio;
     const lo = idx | 0;
-    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[hi] - val) * frac;
+
+    while (lo >= cOff + cur.length) {
+      cOff += cur.length;
+      cIdx++;
+      cur = chunks[cIdx];
+    }
+    const val = cur[lo - cOff];
+
+    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
+    let valNext;
+    if (hi === lo) {
+      valNext = val;
+    } else if (hi < cOff + cur.length) {
+      valNext = cur[hi - cOff];
+    } else {
+      valNext = chunks[cIdx + 1][0];
+    }
+
+    output[i] = val + (valNext - val) * frac;
   }
 
   return output;
