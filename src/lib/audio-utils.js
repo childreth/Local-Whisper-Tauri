@@ -6,9 +6,24 @@
  * filter if you start hearing aliasing artifacts in transcriptions.
  */
 export function downsample(input, inputRate, outputRate) {
-  if (inputRate === outputRate) return input;
+  const chunks = input instanceof Float32Array ? [input] : input;
+  let inLen = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    inLen += chunks[i].length;
+  }
+
+  if (inputRate === outputRate) {
+    if (input instanceof Float32Array) return input;
+    const output = new Float32Array(inLen);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      output.set(chunks[i], offset);
+      offset += chunks[i].length;
+    }
+    return output;
+  }
+
   const ratio = inputRate / outputRate;
-  const inLen = input.length;
   const outLength = (inLen / ratio) | 0;
   const output = new Float32Array(outLength);
 
@@ -16,8 +31,20 @@ export function downsample(input, inputRate, outputRate) {
   // we can completely skip fractional interpolation math and directly assign.
   // This speeds up execution time by ~5x for standard desktop mic rates.
   if (Number.isInteger(ratio)) {
+    let chunkIdx = 0;
+    let currentChunk = chunks[0];
+    let j = 0;
+    let currentChunkLen = currentChunk.length;
+
     for (let i = 0; i < outLength; i++) {
-      output[i] = input[i * ratio];
+      while (j >= currentChunkLen) {
+        j -= currentChunkLen;
+        chunkIdx++;
+        currentChunk = chunks[chunkIdx];
+        currentChunkLen = currentChunk.length;
+      }
+      output[i] = currentChunk[j];
+      j += ratio;
     }
     return output;
   }
@@ -25,13 +52,35 @@ export function downsample(input, inputRate, outputRate) {
   // Optimization: Extract the bounds check from the hot loop.
   // We can safely iterate up to outLength - 1 without hitting the boundary.
   // Using lerp formulation (a + (b - a) * f) also saves execution time.
+  let chunkIdx = 0;
+  let currentChunk = chunks[0];
+  let currentChunkStart = 0;
+  let currentChunkEnd = currentChunk.length;
+
   const safeOutLength = outLength - 1;
   for (let i = 0; i < safeOutLength; i++) {
     const idx = i * ratio;
     const lo = idx | 0;
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[lo + 1] - val) * frac;
+
+    while (lo >= currentChunkEnd) {
+      currentChunkStart += currentChunk.length;
+      chunkIdx++;
+      currentChunk = chunks[chunkIdx];
+      currentChunkEnd = currentChunkStart + currentChunk.length;
+    }
+
+    const localLo = lo - currentChunkStart;
+    const val = currentChunk[localLo];
+
+    let nextVal;
+    if (localLo + 1 < currentChunk.length) {
+      nextVal = currentChunk[localLo + 1];
+    } else {
+      nextVal = chunks[chunkIdx + 1][0];
+    }
+
+    output[i] = val + (nextVal - val) * frac;
   }
 
   // Handle the final sample safely
@@ -39,10 +88,28 @@ export function downsample(input, inputRate, outputRate) {
     const i = outLength - 1;
     const idx = i * ratio;
     const lo = idx | 0;
-    const hi = lo + 1 < inLen ? lo + 1 : inLen - 1;
     const frac = idx - lo;
-    const val = input[lo];
-    output[i] = val + (input[hi] - val) * frac;
+
+    while (lo >= currentChunkEnd) {
+      currentChunkStart += currentChunk.length;
+      chunkIdx++;
+      currentChunk = chunks[chunkIdx];
+      currentChunkEnd = currentChunkStart + currentChunk.length;
+    }
+
+    const localLo = lo - currentChunkStart;
+    const val = currentChunk[localLo];
+
+    let nextVal = val;
+    if (localLo + 1 < currentChunk.length) {
+      nextVal = currentChunk[localLo + 1];
+    } else if (chunkIdx + 1 < chunks.length) {
+      nextVal = chunks[chunkIdx + 1][0];
+    } else {
+      nextVal = currentChunk[currentChunk.length - 1];
+    }
+
+    output[i] = val + (nextVal - val) * frac;
   }
 
   return output;
