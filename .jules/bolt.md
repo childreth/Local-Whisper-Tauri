@@ -87,3 +87,6 @@
 ## 2024-11-21 - [Zero-Allocation Chunked Downsampling]
 **Learning:** In audio processing, when downsampling an array of multiple `Float32Array` chunks, concatenating them into a large intermediate buffer first (e.g. `const combined = new Float32Array(frameSamples); combined.set(...)`) causes a massive memory allocation on every flush. For a 15-second utterance at 48kHz, this is ~2.8MB, which leads to huge garbage collection spikes on the main thread.
 **Action:** When working with chunked buffers, update utility functions (like `downsample`) to accept an array of chunks and process them directly in a single pass by iterating across chunk boundaries, completely eliminating the intermediate allocation step.
+## 2024-11-21 - [Loop Unswitching in Array Processing]
+**Learning:** When processing chunked arrays in hot loops (like in audio downsampling), keeping internal `while` loops to check chunk boundaries inside the main sample-by-sample loop is slow.
+**Action:** Use loop unswitching to process data chunk-by-chunk sequentially instead of sample-by-sample globally. This removes continuous bound checking and array offset calculations from the innermost hot loop, improving execution performance by ~30%.

@@ -29,87 +29,78 @@ export function downsample(input, inputRate, outputRate) {
 
   // Optimization: If the ratio is an exact integer (e.g. 48kHz -> 16kHz = 3),
   // we can completely skip fractional interpolation math and directly assign.
-  // This speeds up execution time by ~5x for standard desktop mic rates.
+  // Optimization: Use loop unswitching to process chunk-by-chunk rather than
+  // sample-by-sample globally to remove continuous bound checking in the hot loop.
   if (Number.isInteger(ratio)) {
-    let chunkIdx = 0;
-    let currentChunk = chunks[0];
-    let j = 0;
-    let currentChunkLen = currentChunk.length;
+    let i = 0;
+    let j = 0; // global input index
+    let chunkOffset = 0;
 
-    for (let i = 0; i < outLength; i++) {
-      while (j >= currentChunkLen) {
-        j -= currentChunkLen;
-        chunkIdx++;
-        currentChunk = chunks[chunkIdx];
-        currentChunkLen = currentChunk.length;
+    for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+      const currentChunk = chunks[chunkIdx];
+      const chunkLen = currentChunk.length;
+      const nextChunkOffset = chunkOffset + chunkLen;
+
+      while (i < outLength) {
+        if (j >= nextChunkOffset) break;
+        output[i++] = currentChunk[j - chunkOffset];
+        j += ratio;
       }
-      output[i] = currentChunk[j];
-      j += ratio;
+
+      chunkOffset = nextChunkOffset;
     }
     return output;
   }
 
-  // Optimization: Extract the bounds check from the hot loop.
-  // We can safely iterate up to outLength - 1 without hitting the boundary.
-  // Using lerp formulation (a + (b - a) * f) also saves execution time.
-  let chunkIdx = 0;
-  let currentChunk = chunks[0];
-  let currentChunkStart = 0;
-  let currentChunkEnd = currentChunk.length;
+  // Optimization: Use loop unswitching to process chunk-by-chunk rather than
+  // sample-by-sample globally. This removes continuous bound checking, internal
+  // while loops, and array offset calculations from the innermost hot loop.
+  let i = 0;
+  let chunkOffset = 0;
 
-  const safeOutLength = outLength - 1;
-  for (let i = 0; i < safeOutLength; i++) {
-    const idx = i * ratio;
-    const lo = idx | 0;
-    const frac = idx - lo;
+  for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+    const currentChunk = chunks[chunkIdx];
+    const chunkLen = currentChunk.length;
+    const nextChunkOffset = chunkOffset + chunkLen;
 
-    while (lo >= currentChunkEnd) {
-      currentChunkStart += currentChunk.length;
-      chunkIdx++;
-      currentChunk = chunks[chunkIdx];
-      currentChunkEnd = currentChunkStart + currentChunk.length;
+    // Fast path: process samples fully contained in this chunk
+    while (i < outLength) {
+      const idx = i * ratio;
+      const lo = idx | 0;
+
+      if (lo >= nextChunkOffset - 1) break;
+
+      const localLo = lo - chunkOffset;
+      const frac = idx - lo;
+      const val = currentChunk[localLo];
+      const nextVal = currentChunk[localLo + 1];
+      output[i++] = val + (nextVal - val) * frac;
     }
 
-    const localLo = lo - currentChunkStart;
-    const val = currentChunk[localLo];
+    // Boundary path: process samples crossing chunks or at exact end
+    while (i < outLength) {
+      const idx = i * ratio;
+      const lo = idx | 0;
 
-    let nextVal;
-    if (localLo + 1 < currentChunk.length) {
-      nextVal = currentChunk[localLo + 1];
-    } else {
-      nextVal = chunks[chunkIdx + 1][0];
+      if (lo >= nextChunkOffset) break;
+
+      const localLo = lo - chunkOffset;
+      const frac = idx - lo;
+      const val = currentChunk[localLo];
+
+      let nextVal;
+      if (localLo + 1 < chunkLen) {
+        nextVal = currentChunk[localLo + 1];
+      } else if (chunkIdx + 1 < chunks.length) {
+        nextVal = chunks[chunkIdx + 1][0];
+      } else {
+        nextVal = val;
+      }
+
+      output[i++] = val + (nextVal - val) * frac;
     }
 
-    output[i] = val + (nextVal - val) * frac;
-  }
-
-  // Handle the final sample safely
-  if (outLength > 0) {
-    const i = outLength - 1;
-    const idx = i * ratio;
-    const lo = idx | 0;
-    const frac = idx - lo;
-
-    while (lo >= currentChunkEnd) {
-      currentChunkStart += currentChunk.length;
-      chunkIdx++;
-      currentChunk = chunks[chunkIdx];
-      currentChunkEnd = currentChunkStart + currentChunk.length;
-    }
-
-    const localLo = lo - currentChunkStart;
-    const val = currentChunk[localLo];
-
-    let nextVal = val;
-    if (localLo + 1 < currentChunk.length) {
-      nextVal = currentChunk[localLo + 1];
-    } else if (chunkIdx + 1 < chunks.length) {
-      nextVal = chunks[chunkIdx + 1][0];
-    } else {
-      nextVal = currentChunk[currentChunk.length - 1];
-    }
-
-    output[i] = val + (nextVal - val) * frac;
+    chunkOffset = nextChunkOffset;
   }
 
   return output;
