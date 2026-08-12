@@ -31,85 +31,59 @@ export function downsample(input, inputRate, outputRate) {
   // we can completely skip fractional interpolation math and directly assign.
   // This speeds up execution time by ~5x for standard desktop mic rates.
   if (Number.isInteger(ratio)) {
-    let chunkIdx = 0;
-    let currentChunk = chunks[0];
-    let j = 0;
-    let currentChunkLen = currentChunk.length;
+    // Optimization: Loop unswitching. Process chunk-by-chunk sequentially
+    // rather than globally. This completely eliminates continuous bounds
+    // checking and inner while loops from the innermost hot path.
+    let outIdx = 0;
+    let inOffset = 0;
 
-    for (let i = 0; i < outLength; i++) {
-      while (j >= currentChunkLen) {
-        j -= currentChunkLen;
-        chunkIdx++;
-        currentChunk = chunks[chunkIdx];
-        currentChunkLen = currentChunk.length;
+    for (let c = 0; c < chunks.length; c++) {
+      const chunk = chunks[c];
+      const len = chunk.length;
+
+      while (inOffset < len && outIdx < outLength) {
+        output[outIdx++] = chunk[inOffset];
+        inOffset += ratio;
       }
-      output[i] = currentChunk[j];
-      j += ratio;
+      inOffset -= len;
     }
     return output;
   }
 
-  // Optimization: Extract the bounds check from the hot loop.
-  // We can safely iterate up to outLength - 1 without hitting the boundary.
-  // Using lerp formulation (a + (b - a) * f) also saves execution time.
-  let chunkIdx = 0;
-  let currentChunk = chunks[0];
-  let currentChunkStart = 0;
-  let currentChunkEnd = currentChunk.length;
+  // Optimization: Loop unswitching for fractional downsampling.
+  let outIdx = 0;
+  let inOffset = 0;
 
-  const safeOutLength = outLength - 1;
-  for (let i = 0; i < safeOutLength; i++) {
-    const idx = i * ratio;
-    const lo = idx | 0;
-    const frac = idx - lo;
+  for (let c = 0; c < chunks.length; c++) {
+    const chunk = chunks[c];
+    const len = chunk.length;
 
-    while (lo >= currentChunkEnd) {
-      currentChunkStart += currentChunk.length;
-      chunkIdx++;
-      currentChunk = chunks[chunkIdx];
-      currentChunkEnd = currentChunkStart + currentChunk.length;
+    // Fast path: safe to look ahead by 1 index within the current chunk
+    while (inOffset < len - 1 && outIdx < outLength) {
+      const lo = inOffset | 0;
+      const frac = inOffset - lo;
+      const val = chunk[lo];
+      const nextVal = chunk[lo + 1];
+      output[outIdx++] = val + (nextVal - val) * frac;
+      inOffset += ratio;
     }
 
-    const localLo = lo - currentChunkStart;
-    const val = currentChunk[localLo];
+    // Boundary path: need to look across chunk boundaries
+    while (inOffset < len && outIdx < outLength) {
+      const lo = inOffset | 0;
+      const frac = inOffset - lo;
+      const val = chunk[lo];
 
-    let nextVal;
-    if (localLo + 1 < currentChunk.length) {
-      nextVal = currentChunk[localLo + 1];
-    } else {
-      nextVal = chunks[chunkIdx + 1][0];
+      let nextVal = val;
+      if (c + 1 < chunks.length) {
+        nextVal = chunks[c + 1][0];
+      }
+
+      output[outIdx++] = val + (nextVal - val) * frac;
+      inOffset += ratio;
     }
 
-    output[i] = val + (nextVal - val) * frac;
-  }
-
-  // Handle the final sample safely
-  if (outLength > 0) {
-    const i = outLength - 1;
-    const idx = i * ratio;
-    const lo = idx | 0;
-    const frac = idx - lo;
-
-    while (lo >= currentChunkEnd) {
-      currentChunkStart += currentChunk.length;
-      chunkIdx++;
-      currentChunk = chunks[chunkIdx];
-      currentChunkEnd = currentChunkStart + currentChunk.length;
-    }
-
-    const localLo = lo - currentChunkStart;
-    const val = currentChunk[localLo];
-
-    let nextVal = val;
-    if (localLo + 1 < currentChunk.length) {
-      nextVal = currentChunk[localLo + 1];
-    } else if (chunkIdx + 1 < chunks.length) {
-      nextVal = chunks[chunkIdx + 1][0];
-    } else {
-      nextVal = currentChunk[currentChunk.length - 1];
-    }
-
-    output[i] = val + (nextVal - val) * frac;
+    inOffset -= len;
   }
 
   return output;
