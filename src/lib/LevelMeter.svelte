@@ -48,7 +48,10 @@
     height: 100%;
     width: 100%;
     background: linear-gradient(90deg, var(--success), #ffeb3b 70%, var(--accent));
-    transition: transform 60ms linear;
+    /* Optimization: Removed transition. Since store subscription manually
+       mutates scaleX at ~25fps, CSS transitions just force the browser to
+       interpolate and discard animations on every frame, wasting CPU. */
+    will-change: transform;
     transform-origin: left;
     transform: scaleX(0);
   }
