@@ -89,12 +89,15 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
     let mut downloaded: u64 = 0;
     let mut last_emit = Instant::now() - PROGRESS_INTERVAL;
 
-    let mut file = tokio::fs::File::create(&tmp_path).await?;
+    let file = tokio::fs::File::create(&tmp_path).await?;
+    // Optimization: Buffer async disk writes to prevent massive thread pool thrashing
+    // and syscall overhead when writing small ~8KB chunks from reqwest stream.
+    let mut writer = tokio::io::BufWriter::with_capacity(256 * 1024, file);
     let mut stream = resp.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| TranscribeError::Download(e.to_string()))?;
-        file.write_all(&chunk).await?;
+        writer.write_all(&chunk).await?;
         downloaded += chunk.len() as u64;
 
         if last_emit.elapsed() >= PROGRESS_INTERVAL {
@@ -109,8 +112,8 @@ pub async fn ensure_model(app: AppHandle, id: String) -> Result<PathBuf, Transcr
             last_emit = Instant::now();
         }
     }
-    file.flush().await?;
-    drop(file);
+    writer.flush().await?;
+    drop(writer);
 
     let _ = app.emit(
         "model:progress",
