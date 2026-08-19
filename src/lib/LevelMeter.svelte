@@ -48,9 +48,12 @@
     height: 100%;
     width: 100%;
     background: linear-gradient(90deg, var(--success), #ffeb3b 70%, var(--accent));
-    transition: transform 60ms linear;
+    /* Optimization: Removed transition. Since store subscriptions manually
+       mutate the transform at ~25fps, CSS transitions force the browser to
+       interpolate and discard animations on every frame, wasting CPU. */
     transform-origin: left;
     transform: scaleX(0);
+    will-change: transform;
   }
   .meter:not(.active) .bar {
     background: var(--text-dim);
