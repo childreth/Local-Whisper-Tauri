@@ -98,3 +98,9 @@
 ## 2024-12-10 - [Removing CSS Transitions on High-Frequency JS-Driven DOM Elements]
 **Learning:** Applying CSS `transition` (e.g., `transition: transform 60ms linear;`) to a DOM element whose transform property is already being continuously mutated by high-frequency JavaScript (such as ~25fps Svelte store subscriptions for a Level Meter) forces the browser's compositor to needlessly calculate, interpolate, and discard animation frames on every manual update. This causes significant, unnecessary main-thread and GPU thrashing.
 **Action:** When a DOM element's visual properties (like `scaleX`) are driven by high-frequency JS loops or store subscriptions, remove any CSS `transition` properties. Instead, apply `will-change: transform;` to promote the element to a dedicated compositor layer, allowing the JS-driven updates to render directly and cheaply.
+## 2024-11-21 - [Sweet Spot for Loop Unrolling Accumulators]
+**Learning:** When optimizing JavaScript loops with unrolling and multiple accumulators (e.g., for sum of squares), 8-way unrolling often hits the sweet spot for Instruction-Level Parallelism (ILP) in V8/Node.js engines, noticeably outperforming 4-way unrolling. However, over-unrolling (e.g., 16-way) can cause register spilling and severely degrade performance.
+**Action:** When manually unrolling hot loops, default to 8-way unrolling as a baseline and always benchmark against other sizes to find the architectural sweet spot for the target environment.
+## 2024-11-21 - [Structural Loop Changes Can Be Slower]
+**Learning:** When optimizing audio downsampling or linear interpolation loops in JavaScript, replacing a standard `while` loop bounds check with a pre-calculated `for` loop iteration count can unexpectedly degrade performance.
+**Action:** Always benchmark structural loop changes rather than assuming pre-calculation is natively faster.
