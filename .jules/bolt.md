@@ -98,3 +98,7 @@
 ## 2024-12-10 - [Removing CSS Transitions on High-Frequency JS-Driven DOM Elements]
 **Learning:** Applying CSS `transition` (e.g., `transition: transform 60ms linear;`) to a DOM element whose transform property is already being continuously mutated by high-frequency JavaScript (such as ~25fps Svelte store subscriptions for a Level Meter) forces the browser's compositor to needlessly calculate, interpolate, and discard animation frames on every manual update. This causes significant, unnecessary main-thread and GPU thrashing.
 **Action:** When a DOM element's visual properties (like `scaleX`) are driven by high-frequency JS loops or store subscriptions, remove any CSS `transition` properties. Instead, apply `will-change: transform;` to promote the element to a dedicated compositor layer, allowing the JS-driven updates to render directly and cheaply.
+
+## 2024-12-11 - [8-way loop unrolling for iterative accumulation in JS]
+**Learning:** When optimizing iterative accumulation loops (like sum-of-squares) over large arrays in JavaScript, 8-way unrolling with 8 independent accumulators significantly outperforms 4-way unrolling, hitting a sweet spot for Instruction-Level Parallelism (ILP) in V8/Node.js engines before register spilling degrades performance.
+**Action:** When unrolling tight JS loops over large arrays, use 8-way unrolling with multiple accumulators instead of 4-way.
