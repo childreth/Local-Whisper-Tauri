@@ -98,26 +98,39 @@ export function sumOfSquares(samples) {
   let sum2 = 0;
   let sum3 = 0;
   let sum4 = 0;
+  let sum5 = 0;
+  let sum6 = 0;
+  let sum7 = 0;
+  let sum8 = 0;
 
   const len = samples.length;
-  const len4 = len - (len % 4);
+  const len8 = len - (len % 8);
   let i = 0;
 
-  // Optimization: 4-way loop unrolling with multiple accumulators.
+  // Optimization: 8-way loop unrolling with multiple accumulators.
   // This breaks loop-carried dependency chains, allowing the CPU/JS engine
-  // to utilize Instruction-Level Parallelism (ILP), speeding up the hot loop by ~25%.
-  for (; i < len4; i += 4) {
+  // to utilize Instruction-Level Parallelism (ILP), hitting the ILP sweet spot
+  // and outperforming 4-way unrolling.
+  for (; i < len8; i += 8) {
     const s0 = samples[i];
     const s1 = samples[i + 1];
     const s2 = samples[i + 2];
     const s3 = samples[i + 3];
+    const s4 = samples[i + 4];
+    const s5 = samples[i + 5];
+    const s6 = samples[i + 6];
+    const s7 = samples[i + 7];
     sum1 += s0 * s0;
     sum2 += s1 * s1;
     sum3 += s2 * s2;
     sum4 += s3 * s3;
+    sum5 += s4 * s4;
+    sum6 += s5 * s5;
+    sum7 += s6 * s6;
+    sum8 += s7 * s7;
   }
 
-  let sum = sum1 + sum2 + sum3 + sum4;
+  let sum = sum1 + sum2 + sum3 + sum4 + sum5 + sum6 + sum7 + sum8;
 
   // Handle remaining elements
   for (; i < len; i++) {
