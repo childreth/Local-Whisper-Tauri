@@ -41,6 +41,9 @@ pub fn run_inference(ctx: &WhisperContext, samples: &[f32]) -> Result<String, Tr
         .map_err(|e| TranscribeError::WhisperFailed(format!("create_state: {e}")))?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    // Optimization: Reduce hallucinations on silent/noisy clips which waste significant CPU cycles
+    params.set_no_context(true);
+    params.set_suppress_blank(true);
     params.set_language(Some("en"));
     params.set_translate(false);
     params.set_print_progress(false);
