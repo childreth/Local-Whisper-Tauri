@@ -101,3 +101,10 @@
 ## 2024-12-15 - [Preventing Whisper Hallucination Loops]
 **Learning:** When using whisper.cpp or whisper-rs, feeding the model near-silence or static can cause it to hallucinate repeating phrases (like "Thank you for watching") and enter decoding loops that consume maximum CPU cycles generating useless tokens. Disabling context (`no_context(true)`) and suppressing blanks (`suppress_blank(true)`) mitigates this behavior and significantly improves CPU efficiency on real-world audio.
 **Action:** Always enable `no_context(true)` and `suppress_blank(true)` when configuring Whisper inference parameters to prevent expensive hallucination loops, unless cross-segment context is strictly required for accuracy.
+## 2024-12-25 - [Dead Code Elimination in JS Benchmarks]
+**Learning:** When writing quick ad-hoc Node.js benchmarks to measure loop performance, if the results of the loop are never read or stored, V8's JIT compiler will aggressively optimize away the loop entirely via dead code elimination, resulting in misleading ~0ms execution times.
+**Action:** Always store the output of hot loops into a persistent outer-scope variable (like a TypedArray) to force the JS engine to actually execute the computations during benchmarks.
+
+## 2024-12-25 - [Inlining Math in Animation Loops]
+**Learning:** In high-frequency animation loops (like Svelte's `tick()` via `requestAnimationFrame`), repeated function calls and division operations add up. Moving constant calculations outside the loop, replacing division by 2 with multiplication by 0.5, and inlining mathematical functions (like the `barHeight` calculation) significantly reduces main-thread JS execution overhead.
+**Action:** For performance-critical `requestAnimationFrame` loops over arrays of elements, manually inline small helper functions to remove call overhead, replace division by constants with multiplication, and hoist invariant math outside the loop structure.

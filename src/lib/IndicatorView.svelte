@@ -53,15 +53,24 @@
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
 
+    const actMul = 0.15 * level;
+
     // Direct DOM mutation for hot loop to bypass Svelte's reactivity system
     // and avoid a full component render/diff on every frame (~60-120fps)
     for (let i = 0; i < BAR_COUNT; i++) {
       if (barElements[i]) {
+        // Optimization: Inline barHeight logic and replace Math.sin(...) / 2 with * 0.5
+        // to remove function call overhead in this hot loop.
+        const wobble = (Math.sin(phase + BAR_PHASE_OFFSET[i]) + 1) * 0.5;
+        const activeVal = level * BAR_BIAS[i] + wobble * actMul;
+        const idle = 0.08 + wobble * 0.08;
+
+        let v = idle > activeVal ? idle : activeVal;
+
         // Optimization: Use GPU-accelerated transform (scaleY) instead of height
         // to prevent main thread layout/reflow thrashing on every frame.
         // Base height is 100% (40px). Minimum scale of 0.1 gives 4px minimum height.
-        const h = barHeight(i, level, phase);
-        const scale = h > 0.1 ? h : 0.1;
+        const scale = v < 0.1 ? 0.1 : (v > 1.0 ? 1.0 : v);
         barElements[i].style.transform = `scaleY(${scale})`;
       }
     }
@@ -106,18 +115,6 @@
     if (unlisten) unlisten();
     clearTimeout(activeTimeout);
   });
-
-  function barHeight(i, currentLevel, currentPhase) {
-    const wobble = (Math.sin(currentPhase + BAR_PHASE_OFFSET[i]) + 1) / 2;
-    const base = currentLevel * BAR_BIAS[i];
-    const idle = 0.08 + wobble * 0.08;
-    const activeVal = base + wobble * 0.15 * currentLevel;
-    const v = idle > activeVal ? idle : activeVal;
-
-    // Equivalent to Math.min(1, Math.max(0.08, v))
-    const clampedBottom = v > 0.08 ? v : 0.08;
-    return clampedBottom > 1 ? 1 : clampedBottom;
-  }
 </script>
 
 <div class="pill" class:transcribing class:active>
