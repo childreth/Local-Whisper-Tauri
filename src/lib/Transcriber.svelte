@@ -332,6 +332,9 @@
 
   function handleKeydown(e) {
     if (e.code !== 'Space') return;
+    // Optimization: Prevent the OS auto-repeat feature from rapidly triggering
+    // toggleRecording() and flooding the backend with empty Whisper tasks.
+    if (e.repeat) return;
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     e.preventDefault();
