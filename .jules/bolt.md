@@ -101,3 +101,7 @@
 ## 2024-12-15 - [Preventing Whisper Hallucination Loops]
 **Learning:** When using whisper.cpp or whisper-rs, feeding the model near-silence or static can cause it to hallucinate repeating phrases (like "Thank you for watching") and enter decoding loops that consume maximum CPU cycles generating useless tokens. Disabling context (`no_context(true)`) and suppressing blanks (`suppress_blank(true)`) mitigates this behavior and significantly improves CPU efficiency on real-world audio.
 **Action:** Always enable `no_context(true)` and `suppress_blank(true)` when configuring Whisper inference parameters to prevent expensive hallucination loops, unless cross-segment context is strictly required for accuracy.
+
+## 2024-12-28 - [Preventing Keyboard Auto-Repeat Thrashing]
+**Learning:** When users hold down a key (like Spacebar) to trigger an action (such as a hold-to-record global hotkey fallback or a UI toggle), the OS generates continuous `keydown` events (e.g., at ~30Hz). If the event handler manages expensive state transitions (like resuming an AudioContext, spawning recording tasks, or flushing heavy IPC payloads), these auto-repeated events cause massive CPU thrashing and can lock up backend worker threads with micro-tasks.
+**Action:** When handling keyboard events for expensive state toggles, always implement an early return for auto-repeats (`if (e.repeat) return;`) to ensure the handler is only evaluated once per distinct key press.
