@@ -35,11 +35,10 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       // Optimization: Replace Math.min with inline conditional to avoid function call overhead
       const copyCount = available < remaining ? available : remaining;
 
-      // Optimization: Replace channel.subarray().set() with a manual loop to prevent
-      // temporary TypedArray allocations and garbage collection pauses in the hot loop.
-      for (let i = 0; i < copyCount; i++) {
-        buffer[offset + i] = channel[inOffset + i];
-      }
+      // Optimization: Use .subarray().set() instead of a manual element-wise loop.
+      // Modern V8 engines optimize .set() to use fast native memory copying (e.g. memmove),
+      // which is significantly faster than the JIT overhead and bounds checking of a JS loop.
+      buffer.set(channel.subarray(inOffset, inOffset + copyCount), offset);
 
       offset += copyCount;
       inOffset += copyCount;
