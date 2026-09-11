@@ -105,3 +105,7 @@
 ## 2024-12-28 - [Preventing Keyboard Auto-Repeat Thrashing]
 **Learning:** When users hold down a key (like Spacebar) to trigger an action (such as a hold-to-record global hotkey fallback or a UI toggle), the OS generates continuous `keydown` events (e.g., at ~30Hz). If the event handler manages expensive state transitions (like resuming an AudioContext, spawning recording tasks, or flushing heavy IPC payloads), these auto-repeated events cause massive CPU thrashing and can lock up backend worker threads with micro-tasks.
 **Action:** When handling keyboard events for expensive state toggles, always implement an early return for auto-repeats (`if (e.repeat) return;`) to ensure the handler is only evaluated once per distinct key press.
+
+## 2024-11-20 - [AudioWorklet subarray vs manual loop]
+**Learning:** An optimization that surprisingly DIDN'T work (and why) - replacing `.subarray().set()` with a manual `for` loop in `AudioWorklet` to "prevent temporary TypedArray allocations and garbage collection pauses" actually made the code significantly slower in Node/V8 (~50% slower). The V8 JIT optimizes `.subarray().set()` very efficiently, often using fast C++ memmove under the hood, while the manual loop incurs interpretation/JIT overhead and bounds checking in JS.
+**Action:** Revert the manual loop back to `.subarray().set()` for faster array copying.
