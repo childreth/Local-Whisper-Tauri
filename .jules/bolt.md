@@ -109,3 +109,7 @@
 ## 2024-11-20 - [AudioWorklet subarray vs manual loop]
 **Learning:** An optimization that surprisingly DIDN'T work (and why) - replacing `.subarray().set()` with a manual `for` loop in `AudioWorklet` to "prevent temporary TypedArray allocations and garbage collection pauses" actually made the code significantly slower in Node/V8 (~50% slower). The V8 JIT optimizes `.subarray().set()` very efficiently, often using fast C++ memmove under the hood, while the manual loop incurs interpretation/JIT overhead and bounds checking in JS.
 **Action:** Revert the manual loop back to `.subarray().set()` for faster array copying.
+
+## 2024-12-28 - [Debouncing High-Frequency LocalStorage Writes]
+**Learning:** Binding synchronous `localStorage.setItem` calls directly inside a Svelte store's `subscribe` block creates severe performance bottlenecks when the store is updated by high-frequency UI events (like `on:input` from range sliders). This forces the main thread to perform synchronous disk I/O on every single micro-update during drag interactions, causing UI stutter and thrashing.
+**Action:** When persisting Svelte store values to `localStorage`, always wrap the `setItem` call in a debounce timer (e.g., `setTimeout` for 300ms) if the store can be mutated rapidly by user interactions.
