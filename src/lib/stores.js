@@ -35,8 +35,12 @@ function loadPreferences() {
 
 export const preferences = writable(loadPreferences());
 
+let prefsTimeout;
 preferences.subscribe((value) => {
-  try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(value));
-  } catch {}
+  clearTimeout(prefsTimeout);
+  prefsTimeout = setTimeout(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(value));
+    } catch {}
+  }, 300);
 });
