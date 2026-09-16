@@ -26,6 +26,9 @@
   const BAR_BIAS = Array.from({length: BAR_COUNT}, () => 0.5 + Math.random() * 0.5);
   // Pre-calculate phase offsets to avoid repeated multiplication in the hot loop
   const BAR_PHASE_OFFSET = Array.from({length: BAR_COUNT}, (_, i) => i * 0.9);
+  // Optimization: Pre-calculate phase sine/cosine to avoid 15x Math.sin/Math.cos calls per frame
+  const BAR_PHASE_SIN = BAR_PHASE_OFFSET.map(Math.sin);
+  const BAR_PHASE_COS = BAR_PHASE_OFFSET.map(Math.cos);
 
   let level = 0; // smoothed 0..1
   let transcribing = false;
@@ -53,6 +56,10 @@
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
 
+    // Pre-calculate the current phase's sine and cosine once per frame
+    const sinP = Math.sin(phase);
+    const cosP = Math.cos(phase);
+
     // Direct DOM mutation for hot loop to bypass Svelte's reactivity system
     // and avoid a full component render/diff on every frame (~60-120fps)
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -60,7 +67,7 @@
         // Optimization: Use GPU-accelerated transform (scaleY) instead of height
         // to prevent main thread layout/reflow thrashing on every frame.
         // Base height is 100% (40px). Minimum scale of 0.1 gives 4px minimum height.
-        const h = barHeight(i, level, phase);
+        const h = barHeight(i, level, sinP, cosP);
         const scale = h > 0.1 ? h : 0.1;
         barElements[i].style.transform = `scaleY(${scale})`;
       }
@@ -107,8 +114,11 @@
     clearTimeout(activeTimeout);
   });
 
-  function barHeight(i, currentLevel, currentPhase) {
-    const wobble = (Math.sin(currentPhase + BAR_PHASE_OFFSET[i]) + 1) / 2;
+  function barHeight(i, currentLevel, sinP, cosP) {
+    // Optimization: Calculate sin(currentPhase + BAR_PHASE_OFFSET[i]) using trig identity
+    // sin(a+b) = sin(a)cos(b) + cos(a)sin(b) to avoid Math.sin overhead in the inner loop
+    const sinRes = sinP * BAR_PHASE_COS[i] + cosP * BAR_PHASE_SIN[i];
+    const wobble = (sinRes + 1) * 0.5;
     const base = currentLevel * BAR_BIAS[i];
     const idle = 0.08 + wobble * 0.08;
     const activeVal = base + wobble * 0.15 * currentLevel;
