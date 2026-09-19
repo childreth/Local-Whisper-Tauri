@@ -38,7 +38,12 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
       // Optimization: Use .subarray().set() instead of a manual element-wise loop.
       // Modern V8 engines optimize .set() to use fast native memory copying (e.g. memmove),
       // which is significantly faster than the JIT overhead and bounds checking of a JS loop.
-      buffer.set(channel.subarray(inOffset, inOffset + copyCount), offset);
+      // Fast path: bypass .subarray() allocation when copying the entire chunk.
+      if (inOffset === 0 && copyCount === channelLength) {
+        buffer.set(channel, offset);
+      } else {
+        buffer.set(channel.subarray(inOffset, inOffset + copyCount), offset);
+      }
 
       offset += copyCount;
       inOffset += copyCount;
