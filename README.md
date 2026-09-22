@@ -1,12 +1,12 @@
 # Local Whisper 🎙️
 
-A desktop speech-to-text app that runs entirely on your own machine. No cloud, no accounts, no audio uploads. You press record, you talk, you get text — and the audio never leaves your computer.
+Personal exploration project building a desktop speech-to-text app that runs entirely on your own machine. No cloud, no accounts, no audio uploads. Press record, talk, get text and the audio never leaves your computer.
 
 Built with Tauri v2 (Rust + native webview), Svelte (vanilla JavaScript), and [whisper.cpp](https://github.com/ggerganov/whisper.cpp) via the [`whisper-rs`](https://github.com/tazz4843/whisper-rs) Rust bindings.
 
 ## Why local STT? 🤔
 
-Most consumer transcription tools — Otter, Rev, Google Live Transcribe, Apple's dictation — stream your audio to a remote server. That's fine for casual use, but it's a non-starter when:
+Most consumer transcription tools stream your audio to a remote server. That's fine for casual use, but it's a non-starter when:
 
 - You're transcribing a private conversation, an interview under NDA, a therapy session, a legal meeting, or anything you'd be uncomfortable putting through someone else's data pipeline.
 - You're somewhere with no internet and you still want dictation to work.
