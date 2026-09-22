@@ -64,7 +64,8 @@ pub fn run_inference(ctx: &WhisperContext, samples: &[f32]) -> Result<String, Tr
     // and per-segment text is read via get_segment(i).to_str().
     let n = state.full_n_segments();
 
-    let mut out = String::new();
+    // Pre-allocate assuming ~32 bytes per segment on average
+    let mut out = String::with_capacity(n as usize * 32);
     for i in 0..n {
         let segment = state
             .get_segment(i)
