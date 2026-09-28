@@ -54,6 +54,8 @@
   $: silenceDurationSamples = (silenceDurationMs * inputSampleRate) / 1000;
   $: minUtteranceSamples = (MIN_UTTERANCE_MS * inputSampleRate) / 1000;
   $: maxUtteranceSamples = (MAX_UTTERANCE_MS * inputSampleRate) / 1000;
+  // Pre-calculate LevelMeter emit threshold (40ms) in samples to avoid performance.now()
+  $: levelEmitSamples = (40 * inputSampleRate) / 1000;
   // Pre-calculate the squared threshold to avoid taking square root of energy on every frame
   $: silenceThresholdSq = silenceThreshold * silenceThreshold;
   // Pre-calculate 0.5x threshold squared for fast flush evaluation (0.5 * 0.5 = 0.25)
@@ -198,7 +200,7 @@
     utteranceSquareSum = 0;
   }
 
-  let lastLevelEmit = 0;
+  let samplesSinceLastLevelEmit = 0;
   let wasRecording = false;
 
   function handleFrame(frame) {
@@ -228,13 +230,15 @@
 
     wasRecording = true;
     const energy = sumOfSquares(frame);
-    const now = performance.now();
+    samplesSinceLastLevelEmit += frame.length;
     // Mic meter only meaningful while we're "live".
     // Optimization: Throttle Svelte store updates to ~25fps (every 40ms). The
     // AudioWorklet emits frames ~333 times a second. Unthrottled store updates
     // cause massive main thread layout/paint thrashing for the visual LevelMeter.
-    if (now - lastLevelEmit > 40) {
-      lastLevelEmit = now;
+    // Also, use raw sample counts instead of performance.now() to avoid expensive
+    // system clock queries and function calls entirely in the hot loop.
+    if (samplesSinceLastLevelEmit > levelEmitSamples) {
+      samplesSinceLastLevelEmit = 0;
       // Reconstitute level from energy just for the UI
       const level = Math.sqrt(energy / frame.length);
       micLevel.set(level);
