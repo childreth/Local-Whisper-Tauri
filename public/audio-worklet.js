@@ -28,6 +28,26 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     let offset = this.offset;
     const batchSize = this.batchSize;
 
+    // Fast path: If the entire incoming block fits into the remaining batch buffer,
+    // we can copy it perfectly without slicing, looping, or complex boundary checks.
+    // For a standard 128-sample block mapped to a 2048-sample batch, this is
+    // true ~93% of the time, bypassing the while-loop entirely.
+    if (offset + channelLength <= batchSize) {
+      buffer.set(channel, offset);
+      offset += channelLength;
+
+      if (offset >= batchSize) {
+        const transferBuffer = buffer;
+        this.port.postMessage(transferBuffer, [transferBuffer.buffer]);
+        buffer = new Float32Array(batchSize);
+        offset = 0;
+      }
+
+      this.buffer = buffer;
+      this.offset = offset;
+      return true;
+    }
+
     while (inOffset < channelLength) {
       const remaining = batchSize - offset;
       const available = channelLength - inOffset;
