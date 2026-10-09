@@ -5,3 +5,7 @@
 ## 2025-01-22 - AudioWorklet block copy fast-path
 **Learning:** When batching small AudioWorklet blocks (e.g., 128 samples) into a larger buffer (e.g., 2048 samples) using a while loop, the vast majority of blocks (e.g., 15 out of 16) perfectly fit without crossing the batch boundary.
 **Action:** Always add a fast-path condition (e.g., `if (offset + channelLength <= batchSize)`) to bypass the while loop entirely, allowing a single native `buffer.set()` call without allocating intermediate `.subarray()` views.
+
+## 2025-01-26 - Optimize Svelte store updates for large arrays
+**Learning:** When updating a single element in a large Svelte array store, using `.map()` creates a new object allocation for every unmodified element, causing unnecessary GC pressure.
+**Action:** Use `.findIndex()` to locate the specific element, create a shallow copy of the array with `[...arr]`, and update only that specific index to preserve object references and drastically reduce allocation overhead.

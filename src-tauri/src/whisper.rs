@@ -50,6 +50,7 @@ pub fn run_inference(ctx: &WhisperContext, samples: &[f32]) -> Result<String, Tr
     params.set_print_special(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    params.set_no_speech_thold(0.6);
 
     let threads = std::thread::available_parallelism()
         .map(|n| n.get() as i32)

@@ -301,13 +301,16 @@
       return transcribe(pcm)
         .then(async (text) => {
           const clean = (text || '').trim();
-          transcript.update((segs) =>
-            segs.map((s) =>
-              s.id === id
-                ? { ...s, text: clean || '(silence)', pending: false }
-                : s
-            )
-          );
+          // Optimization: Replace O(N) array map with targeted index update.
+          // For long transcription sessions, mapping over the entire array for every
+          // utterance creates unnecessary object allocations and GC pressure.
+          transcript.update((segs) => {
+            const idx = segs.findIndex((s) => s.id === id);
+            if (idx === -1) return segs;
+            const updated = [...segs];
+            updated[idx] = { ...updated[idx], text: clean || '(silence)', pending: false };
+            return updated;
+          });
           if (shouldPaste && clean) {
             try {
               await pasteText(clean);
@@ -317,13 +320,13 @@
           }
         })
         .catch((e) => {
-          transcript.update((segs) =>
-            segs.map((s) =>
-              s.id === id
-                ? { ...s, text: '⚠️ transcription failed', pending: false }
-                : s
-            )
-          );
+          transcript.update((segs) => {
+            const idx = segs.findIndex((s) => s.id === id);
+            if (idx === -1) return segs;
+            const updated = [...segs];
+            updated[idx] = { ...updated[idx], text: '⚠️ transcription failed', pending: false };
+            return updated;
+          });
           lastError.set({ kind: 'transcribe', message: String(e) });
         });
     });
