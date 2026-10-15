@@ -55,6 +55,8 @@
 
     phase += 0.15;
     level *= 0.85; // decay the audio level smoothly
+    // Optimization: prevent denormal floating point math slowdowns near zero
+    if (level < 1e-8) level = 0;
 
     // Pre-calculate the current phase's sine and cosine once per frame
     const sinP = Math.sin(phase);

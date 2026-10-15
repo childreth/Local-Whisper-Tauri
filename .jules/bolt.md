@@ -9,3 +9,7 @@
 ## 2025-01-26 - Optimize Svelte store updates for large arrays
 **Learning:** When updating a single element in a large Svelte array store, using `.map()` creates a new object allocation for every unmodified element, causing unnecessary GC pressure.
 **Action:** Use `.findIndex()` to locate the specific element, create a shallow copy of the array with `[...arr]`, and update only that specific index to preserve object references and drastically reduce allocation overhead.
+
+## 2025-02-06 - Prevent denormal math slowdowns in exponential decay loops
+**Learning:** In high-frequency UI animation loops that use mathematical exponential decay (e.g., `level *= 0.85`), the floating-point values eventually approach zero and enter the subnormal (denormal) range. Processing these subnormal numbers causes massive CPU performance penalties in many architectures.
+**Action:** Always clamp or flush imperceptibly small decay values to exactly zero (e.g., `if (level < 1e-8) level = 0;`) inside the loop. This prevents the CPU from thrashing on denormal arithmetic and drastically reduces background CPU usage when an animation approaches rest.
