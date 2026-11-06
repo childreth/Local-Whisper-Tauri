@@ -2,13 +2,13 @@
 // Loaded via audioContext.audioWorklet.addModule('/audio-worklet.js').
 
 class PcmCaptureProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
     // A standard AudioWorklet processes in blocks of 128 samples.
     // Emitting a message to the main thread on every block causes ~375Hz of main-thread
     // wakeups and GC allocations (at 48kHz). We batch into larger chunks (e.g. 2048) to reduce
     // CPU overhead while keeping latency low enough for VAD (~42ms at 48kHz).
-    this.batchSize = 2048;
+    this.batchSize = options?.processorOptions?.batchSize || 2048;
     this.buffer = new Float32Array(this.batchSize);
     this.offset = 0;
   }
