@@ -74,14 +74,28 @@
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: TARGET_SAMPLE_RATE,
         },
       });
 
-      audioCtx = new AudioContext();
+      // Optimization: By specifying the sample rate here, we offload resampling
+      // from our JS pipeline to the browser's native C++ audio engine.
+      audioCtx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
       inputSampleRate = audioCtx.sampleRate;
 
       await audioCtx.audioWorklet.addModule('/audio-worklet.js');
-      workletNode = new AudioWorkletNode(audioCtx, 'pcm-capture');
+
+      // Calculate a batch size that represents ~42ms of audio, but ensure it's
+      // an exact multiple of the Web Audio API render quantum (128 samples).
+      // This guarantees that 100% of blocks hit the fast-path zero-allocation
+      // copy branch in the AudioWorklet.
+      const msPerQuantum = (128 / inputSampleRate) * 1000;
+      const quantumsNeeded = Math.ceil(42 / msPerQuantum);
+      const batchSize = quantumsNeeded * 128;
+
+      workletNode = new AudioWorkletNode(audioCtx, 'pcm-capture', {
+        processorOptions: { batchSize }
+      });
       workletNode.port.onmessage = (e) => handleFrame(e.data);
 
       sourceNode = audioCtx.createMediaStreamSource(mediaStream);
