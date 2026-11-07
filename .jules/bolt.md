@@ -17,3 +17,6 @@
 ## 2025-02-12 - Fractional downsampling unrolling
 **Learning:** In JavaScript fractional downsampling (linear interpolation) hot loops, applying 8-way loop unrolling to the innermost `while` loop (processing 8 samples per bounds check) significantly reduces bounds-checking overhead and branch mispredictions, improving performance on large buffers. Furthermore, when performing linear interpolation in V8/Node.js hot loops, inlining the look-ahead array access directly into the mathematical expression (e.g., `chunk[lo + 1] - val`) can outperform caching it in a local variable, as it avoids unnecessary local assignment overhead.
 **Action:** Unroll tight mathematical DSP `while` loops processing float arrays and inline sequential array element reads where readability is not drastically impacted to maximize V8 JIT performance.
+## 2025-03-01 - Offloading audio downsampling to native browser engine
+**Learning:** Offloading expensive audio downsampling from JavaScript hot loops to the browser's native C++ engine by explicitly specifying the target `sampleRate` in the `AudioContext` constructor and `getUserMedia` constraints significantly improves performance.
+**Action:** When initializing audio pipelines for processing, explicitly set the desired downsampled `sampleRate` to bypass expensive manual resampling routines in JavaScript.
