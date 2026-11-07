@@ -71,13 +71,14 @@
       mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
+          sampleRate: TARGET_SAMPLE_RATE,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
       });
 
-      audioCtx = new AudioContext();
+      audioCtx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
       inputSampleRate = audioCtx.sampleRate;
 
       await audioCtx.audioWorklet.addModule('/audio-worklet.js');
