@@ -74,10 +74,11 @@
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: TARGET_SAMPLE_RATE,
         },
       });
 
-      audioCtx = new AudioContext();
+      audioCtx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
       inputSampleRate = audioCtx.sampleRate;
 
       await audioCtx.audioWorklet.addModule('/audio-worklet.js');
